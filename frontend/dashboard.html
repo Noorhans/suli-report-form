@@ -302,14 +302,21 @@ async function loadReports() {
   }
 
   body.innerHTML = data.reports.map((r) => {
-    const location = (r.lat != null && r.lng != null)
-      ? `<a class="link" target="_blank" href="https://www.google.com/maps?q=${r.lat},${r.lng}">${r.lat.toFixed(4)}, ${r.lng.toFixed(4)}</a>`
-      : `<span class="muted">—</span>`;
+    let location = `<span class="muted">—</span>`;
+    if (r.lat != null && r.lng != null) {
+      const mapsUrl = `https://www.google.com/maps?q=${r.lat},${r.lng}`;
+      const label = r.location_label ? r.location_label : (r.lat.toFixed(4) + ", " + r.lng.toFixed(4));
+      location = `<a class="link" target="_blank" href="${mapsUrl}">${label}</a>`;
+      if (r.location_label) {
+        location += `<div class="muted" style="font-size:11px; margin-top:2px;">${r.lat.toFixed(4)}, ${r.lng.toFixed(4)}</div>`;
+      }
+    }
+    const mediaPath = (p) => p.replace(/^uploads[\/\\]/, "").replace(/\\/g, "/");
     const photo = r.photo_path
-      ? `<a class="link" target="_blank" href="/media/${r.photo_path.replace(/^uploads[\/\\]/, '').replace(/\\/g, '/')}">بینین</a>`
+      ? `<a class="link" target="_blank" href="/media/${mediaPath(r.photo_path)}">بینین</a>`
       : `<span class="muted">—</span>`;
     const audio = r.audio_path
-      ? `<audio class="mini" controls src="/media/${r.audio_path.replace(/^uploads[\/\\]/, '').replace(/\\/g, '/')}"></audio>`
+      ? `<audio class="mini" controls src="/media/${mediaPath(r.audio_path)}"></audio>`
       : `<span class="muted">—</span>`;
     const desc = r.description ? r.description : `<span class="muted">—</span>`;
     const categoryLabel = r.category ? (categoryLabels[r.category] || r.category) : "پۆلێنی نەکراو";
