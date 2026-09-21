@@ -171,6 +171,22 @@
     margin-top: 6px;
     text-align: right;
   }
+  .location-label-input {
+    width: 100%;
+    background: var(--card);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 14px;
+    font-family: inherit;
+    margin-top: 8px;
+  }
+  .location-label-input::placeholder { color: #6f7280; }
+  .location-label-input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
   .photo-preview-wrap {
     display: none;
     margin-top: 10px;
@@ -289,7 +305,8 @@
       </span>
       <button type="button" class="retry-btn" id="location-retry" style="display:none;">هەوڵدانەوە</button>
     </div>
-    <div class="location-caption">شوێن لەلایەن OpenStreetMap پشتگیری دەکرێت</div>
+    <input type="text" class="location-label-input" id="location-label-input" placeholder="ناوی گەڕەک یان شەقام (بۆ نموونە: ڕاپەڕین)">
+    <div class="location-caption">ئەگەر ناونیشانەکە ڕاست نییە دەتوانیت بیگۆڕیت · شوێن لەلایەن OpenStreetMap پشتگیری دەکرێت</div>
 
     <label for="description">کێشەکە باس بکە</label>
     <textarea id="description" placeholder="بۆ نموونە: ئاو لە شەقام کۆبووەتەوە و ڕێگا داخستووە نزیک بازاڕ."></textarea>
@@ -349,14 +366,22 @@ let recordStartTime = null;
 let recordTimerInterval = null;
 
 // ---------- location ----------
+// Many roads in this region are only tagged with plot/block codes in
+// OpenStreetMap (e.g. "102-7") instead of a real street name - those aren't
+// useful to show, so skip anything that's just digits/dashes/slashes.
+function isCodeLikeRoad(v) {
+  return !v || /^[\d\s\-\/]+$/.test(v);
+}
+
 function buildAddressLabel(addr) {
   if (!addr) return null;
   const parts = [];
-  if (addr.road) parts.push(addr.road);
+  if (addr.road && !isCodeLikeRoad(addr.road)) parts.push(addr.road);
   const neighbourhood = addr.neighbourhood || addr.suburb || addr.quarter || addr.city_district;
   if (neighbourhood && neighbourhood !== addr.road) parts.push(neighbourhood);
   const city = addr.city || addr.town || addr.village;
   if (city && city !== neighbourhood) parts.push(city);
+  if (!parts.length && addr.county) parts.push(addr.county);
   if (!parts.length && addr.state) parts.push(addr.state);
   return parts.length ? parts.join("، ") : null;
 }
@@ -374,6 +399,14 @@ async function reverseGeocode(lat, lng) {
   }
 }
 
+const locationLabelInput = document.getElementById("location-label-input");
+// True once the citizen has typed/edited the location name themselves -
+// after that we never overwrite it with an automatic guess, even on retry.
+let labelEditedByUser = false;
+locationLabelInput.addEventListener("input", () => {
+  labelEditedByUser = true;
+});
+
 function requestLocation() {
   const dot = document.getElementById("location-dot");
   const text = document.getElementById("location-text");
@@ -382,11 +415,10 @@ function requestLocation() {
   dot.className = "dot pending";
   text.textContent = "وەرگرتنی شوێن...";
   retry.style.display = "none";
-  currentLocation.label = null;
 
   if (!("geolocation" in navigator)) {
     dot.className = "dot err";
-    text.textContent = "ڕاژەکار پشتگیری شوێن ناکات";
+    text.textContent = "ڕاژەکار پشتگیری شوێن ناکات - دەتوانیت ناونیشانەکە بە دەست بنووسیت";
     retry.style.display = "inline-block";
     return;
   }
@@ -401,20 +433,19 @@ function requestLocation() {
       text.textContent = "شوێن دیاری کرا ✓ " + coordsText;
       retry.style.display = "none";
 
-      text.textContent = "وەرگرتنی ناونیشان...";
       const label = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
       // Ignore a stale reverse-geocode result if the location has since changed/retried.
       if (currentLocation.lat !== pos.coords.latitude || currentLocation.lng !== pos.coords.longitude) return;
-      if (label) {
-        currentLocation.label = label;
-        text.textContent = "✓ " + label;
-      } else {
-        text.textContent = "شوێن دیاری کرا ✓ " + coordsText;
+      // Never overwrite text the citizen already typed themselves - the
+      // automatic guess is only a starting point, they may know better
+      // (e.g. their area isn't well mapped and they know it as "ڕاپەڕین").
+      if (label && !labelEditedByUser) {
+        locationLabelInput.value = label;
       }
     },
     (err) => {
       dot.className = "dot err";
-      text.textContent = "شوێن بەردەست نییە - دەتوانیت بەبێ شوێن بینێریت";
+      text.textContent = "شوێن بەردەست نییە - دەتوانیت ناونیشانەکە بە دەست بنووسیت";
       retry.style.display = "inline-block";
     },
     { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -562,6 +593,8 @@ function resetForm() {
   form.reset();
   clearPhoto();
   clearAudio();
+  locationLabelInput.value = "";
+  labelEditedByUser = false;
 }
 
 form.addEventListener("submit", async (e) => {
@@ -583,8 +616,11 @@ form.addEventListener("submit", async (e) => {
     fd.append("lat", currentLocation.lat);
     fd.append("lng", currentLocation.lng);
     fd.append("accuracy", currentLocation.accuracy);
-    if (currentLocation.label) fd.append("location_label", currentLocation.label);
   }
+  // The label is independent of GPS success - the citizen can type it by
+  // hand even if location access failed or the auto-guess was wrong.
+  const locationLabel = locationLabelInput.value.trim();
+  if (locationLabel) fd.append("location_label", locationLabel);
   if (selectedPhoto) fd.append("photo", selectedPhoto);
   if (recordedAudioBlob) fd.append("audio", recordedAudioBlob, "voice-note.webm");
 
