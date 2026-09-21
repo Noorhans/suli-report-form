@@ -1,0 +1,17 @@
+# Render "Blueprint" — lets Render create the web service straight from this
+# repo with the right settings pre-filled (New -> Blueprint in the Render
+# dashboard, point it at your GitHub repo). You still add the DATABASE_URL
+# env var yourself after creating a free Postgres DB (Supabase or similar) —
+# see README.md, "Publish it (a real public URL)".
+services:
+  - type: web
+    name: suli-report-form
+    runtime: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DATABASE_URL
+        sync: false
