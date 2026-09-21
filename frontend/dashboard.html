@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="ckb" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>داشبۆردی ڕاپۆرتەکان</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #17181c;
+    --card: #1f2127;
+    --border: #33363f;
+    --text: #f2f2f4;
+    --text-dim: #9a9ca6;
+    --text-mute: #6f7280;
+    --accent: #3b6dee;
+    --accent-soft: rgba(59,109,238,0.18);
+    --success: #2fbf71;
+    --warning: #d9a441;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Kufi Arabic', 'Segoe UI', Tahoma, sans-serif;
+  }
+  body { padding: 24px 18px 60px; }
+  .wrap { max-width: 980px; margin: 0 auto; }
+
+  .top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+  h1 { font-size: 22px; margin: 0; }
+  .top-actions { display: flex; gap: 10px; align-items: center; }
+  .btn {
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 9px 16px;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  @media (max-width: 700px) { .stats-row { grid-template-columns: repeat(2, 1fr); } }
+  .stat-tile {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+  }
+  .stat-num {
+    font-size: 28px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-label { font-size: 12.5px; color: var(--text-dim); margin-top: 4px; }
+
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .panel h2 { font-size: 15px; margin: 0 0 16px; font-weight: 600; }
+  .empty { color: var(--text-mute); font-size: 13.5px; padding: 10px 0; }
+
+  /* bar chart */
+  .bar-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; position: relative; }
+  .bar-label { width: 150px; flex-shrink: 0; font-size: 13px; color: var(--text-dim); text-align: left; }
+  .bar-track { flex: 1; background: rgba(255,255,255,0.04); border-radius: 4px; height: 20px; overflow: hidden; }
+  .bar-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 4px;
+    min-width: 4px;
+    transition: filter .15s;
+  }
+  .bar-row:hover .bar-fill { filter: brightness(1.2); }
+  .bar-count { width: 34px; flex-shrink: 0; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--text); text-align: right; }
+
+  /* sparkline */
+  .spark-wrap { overflow-x: auto; }
+  svg.spark { display: block; }
+  .spark-day-label { font-size: 10px; fill: var(--text-mute); font-family: 'Noto Kufi Arabic', sans-serif; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  thead th {
+    text-align: right;
+    color: var(--text-dim);
+    font-weight: 600;
+    font-size: 12px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  tbody td {
+    padding: 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tbody tr:hover { background: rgba(255,255,255,0.02); }
+  .table-scroll { overflow-x: auto; }
+  .pill {
+    display: inline-block;
+    background: var(--accent-soft);
+    color: #9db8f7;
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .muted { color: var(--text-mute); }
+  .desc-cell { max-width: 260px; }
+  a.link { color: #9db8f7; text-decoration: none; }
+  a.link:hover { text-decoration: underline; }
+  audio.mini { height: 30px; width: 190px; }
+  .time-cell { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--text-dim); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1>داشبۆردی ڕاپۆرتەکان</h1>
+    <div class="top-actions">
+      <button class="btn" id="refresh-btn">نوێکردنەوە</button>
+      <a class="btn primary" href="/api/reports/export.csv">داگرتنی CSV</a>
+    </div>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat-tile"><div class="stat-num" id="stat-total">–</div><div class="stat-label">کۆی گشتی ڕاپۆرت</div></div>
+    <div class="stat-tile"><div class="stat-num" id="stat-photo">–</div><div class="stat-label">بە وێنە</div></div>
+    <div class="stat-tile"><div class="stat-num" id="stat-audio">–</div><div class="stat-label">بە تۆماری دەنگ</div></div>
+    <div class="stat-tile"><div class="stat-num" id="stat-location">–</div><div class="stat-label">بە شوێنی GPS</div></div>
+  </div>
+
+  <div class="panel">
+    <h2>ڕاپۆرت بەپێی جۆری کێشە</h2>
+    <div id="bar-chart"><div class="empty">بارکردن...</div></div>
+  </div>
+
+  <div class="panel">
+    <h2>ڕاپۆرتی ڕۆژانە (١٤ ڕۆژی ڕابردوو)</h2>
+    <div class="spark-wrap"><div id="spark-chart"><div class="empty">بارکردن...</div></div></div>
+  </div>
+
+  <div class="panel">
+    <h2>لیستی ڕاپۆرتەکان</h2>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>کات</th>
+            <th>جۆر</th>
+            <th>وەسف</th>
+            <th>شوێن</th>
+            <th>وێنە</th>
+            <th>دەنگ</th>
+            <th>دۆخ</th>
+          </tr>
+        </thead>
+        <tbody id="reports-body">
+          <tr><td colspan="7" class="empty">بارکردن...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+const ACCENT = "#3b6dee";
+let categoryLabels = {};
+
+async function loadCategoryLabels() {
+  try {
+    const res = await fetch("/api/config");
+    const data = await res.json();
+    categoryLabels = data.categories || {};
+  } catch (e) {
+    categoryLabels = {};
+  }
+}
+
+function fmtTime(iso) {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString("en-GB", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  } catch (e) { return iso; }
+}
+
+async function loadStats() {
+  const res = await fetch("/api/reports/stats");
+  const s = await res.json();
+
+  document.getElementById("stat-total").textContent = s.total;
+  document.getElementById("stat-photo").textContent = s.with_photo;
+  document.getElementById("stat-audio").textContent = s.with_audio;
+  document.getElementById("stat-location").textContent = s.with_location;
+
+  renderBarChart(s.by_category);
+  renderSparkline(s.by_day);
+}
+
+function renderBarChart(byCategory) {
+  const el = document.getElementById("bar-chart");
+  if (!byCategory.length) {
+    el.innerHTML = '<div class="empty">هیچ ڕاپۆرتێک نییە</div>';
+    return;
+  }
+  const max = Math.max(...byCategory.map((c) => c.count));
+  el.innerHTML = byCategory.map((c) => {
+    const pct = Math.max(4, Math.round((c.count / max) * 100));
+    return `
+      <div class="bar-row" title="${c.label}: ${c.count}">
+        <div class="bar-label">${c.label}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+        <div class="bar-count">${c.count}</div>
+      </div>`;
+  }).join("");
+}
+
+function renderSparkline(byDay) {
+  const el = document.getElementById("spark-chart");
+  if (!byDay.length) {
+    el.innerHTML = '<div class="empty">هێشتا داتا نییە بۆ ڕۆژانە</div>';
+    return;
+  }
+  const w = Math.max(360, byDay.length * 46);
+  const h = 120;
+  const padTop = 16, padBottom = 24, padSide = 10;
+  const max = Math.max(1, ...byDay.map((d) => d.count));
+  const innerW = w - padSide * 2;
+  const innerH = h - padTop - padBottom;
+  const stepX = byDay.length > 1 ? innerW / (byDay.length - 1) : 0;
+
+  const points = byDay.map((d, i) => {
+    const x = padSide + i * stepX;
+    const y = padTop + innerH - (d.count / max) * innerH;
+    return { x, y, d };
+  });
+
+  const linePath = points.map((p, i) => (i === 0 ? "M" : "L") + p.x.toFixed(1) + "," + p.y.toFixed(1)).join(" ");
+  const areaPath = linePath + ` L${points[points.length - 1].x.toFixed(1)},${(padTop + innerH).toFixed(1)} L${points[0].x.toFixed(1)},${(padTop + innerH).toFixed(1)} Z`;
+
+  const dots = points.map((p) =>
+    `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="${ACCENT}"><title>${p.d.day}: ${p.d.count}</title></circle>`
+  ).join("");
+
+  const labels = points.map((p, i) => {
+    if (byDay.length > 8 && i % 2 !== 0) return "";
+    const short = p.d.day.slice(5); // MM-DD
+    return `<text x="${p.x.toFixed(1)}" y="${h - 6}" text-anchor="middle" class="spark-day-label">${short}</text>`;
+  }).join("");
+
+  el.innerHTML = `
+    <svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+      <defs>
+        <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${ACCENT}" stop-opacity="0.35"/>
+          <stop offset="100%" stop-color="${ACCENT}" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d="${areaPath}" fill="url(#sparkFill)" stroke="none"/>
+      <path d="${linePath}" fill="none" stroke="${ACCENT}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      ${dots}
+      ${labels}
+    </svg>`;
+}
+
+async function loadReports() {
+  const res = await fetch("/api/reports?limit=200");
+  const data = await res.json();
+  const body = document.getElementById("reports-body");
+
+  if (!data.reports.length) {
+    body.innerHTML = '<tr><td colspan="7" class="empty">هێشتا هیچ ڕاپۆرتێک نەنێردراوە</td></tr>';
+    return;
+  }
+
+  body.innerHTML = data.reports.map((r) => {
+    const location = (r.lat != null && r.lng != null)
+      ? `<a class="link" target="_blank" href="https://www.google.com/maps?q=${r.lat},${r.lng}">${r.lat.toFixed(4)}, ${r.lng.toFixed(4)}</a>`
+      : `<span class="muted">—</span>`;
+    const photo = r.photo_path
+      ? `<a class="link" target="_blank" href="/media/${r.photo_path.replace(/^uploads[\/\\]/, '').replace(/\\/g, '/')}">بینین</a>`
+      : `<span class="muted">—</span>`;
+    const audio = r.audio_path
+      ? `<audio class="mini" controls src="/media/${r.audio_path.replace(/^uploads[\/\\]/, '').replace(/\\/g, '/')}"></audio>`
+      : `<span class="muted">—</span>`;
+    const desc = r.description ? r.description : `<span class="muted">—</span>`;
+    const categoryLabel = r.category ? (categoryLabels[r.category] || r.category) : "پۆلێنی نەکراو";
+
+    return `
+      <tr>
+        <td class="time-cell">${fmtTime(r.created_at)}</td>
+        <td><span class="pill">${categoryLabel}</span></td>
+        <td class="desc-cell">${desc}</td>
+        <td>${location}</td>
+        <td>${photo}</td>
+        <td>${audio}</td>
+        <td>${r.status}</td>
+      </tr>`;
+  }).join("");
+}
+
+async function loadAll() {
+  await loadCategoryLabels();
+  loadStats();
+  loadReports();
+}
+
+document.getElementById("refresh-btn").addEventListener("click", loadAll);
+loadAll();
+</script>
+</body>
+</html>
