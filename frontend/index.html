@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="ckb" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>ڕاپۆرتکردنی کێشە</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #17181c;
+    --card: #1f2127;
+    --border: #33363f;
+    --border-soft: #2a2c33;
+    --text: #f2f2f4;
+    --text-dim: #9a9ca6;
+    --accent: #3b6dee;
+    --accent-hover: #2f5cd1;
+    --danger: #e24b4b;
+    --success: #2fbf71;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Kufi Arabic', 'Segoe UI', Tahoma, sans-serif;
+  }
+  body {
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 28px 16px 60px;
+  }
+  .card {
+    width: 100%;
+    max-width: 480px;
+  }
+  .top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 4px;
+  }
+  h1 {
+    font-size: 24px;
+    margin: 0;
+  }
+  .badge {
+    font-size: 12px;
+    color: var(--text-dim);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 12px;
+    white-space: nowrap;
+  }
+  .subtitle {
+    color: var(--text-dim);
+    font-size: 14px;
+    margin: 6px 0 24px;
+  }
+  label {
+    display: block;
+    font-weight: 600;
+    font-size: 15px;
+    margin: 20px 0 8px;
+  }
+  select, textarea {
+    width: 100%;
+    background: var(--card);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 14px;
+    font-size: 15px;
+    font-family: inherit;
+    appearance: none;
+  }
+  select {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239a9ca6' stroke-width='2'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat;
+    background-position: left 14px center;
+    padding-left: 36px;
+  }
+  textarea {
+    min-height: 110px;
+    resize: vertical;
+    line-height: 1.6;
+  }
+  textarea::placeholder { color: #6f7280; }
+  select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .location-box {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 13px 14px;
+    font-size: 14px;
+  }
+  .location-status { color: var(--text-dim); display: flex; align-items: center; gap: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim); flex-shrink: 0; }
+  .dot.ok { background: var(--success); }
+  .dot.err { background: var(--danger); }
+  .dot.pending { background: #d9a441; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.35;} }
+  .retry-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .retry-btn:hover { color: var(--text); border-color: var(--accent); }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 24px;
+  }
+  .dashed-btn {
+    background: var(--card);
+    border: 1.5px dashed var(--border);
+    color: var(--text);
+    border-radius: var(--radius);
+    padding: 18px 10px;
+    font-size: 15px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    text-align: center;
+  }
+  .dashed-btn .icon { font-size: 22px; }
+  .dashed-btn.active { border-style: solid; border-color: var(--accent); }
+  .dashed-btn.recording { border-style: solid; border-color: var(--danger); }
+  .hint {
+    display: block;
+    font-size: 12px;
+    color: var(--text-dim);
+    text-align: center;
+    margin-top: 8px;
+    min-height: 16px;
+  }
+
+  .note {
+    margin-top: 22px;
+    background: rgba(59,109,238,0.08);
+    border: 1px solid rgba(59,109,238,0.35);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.7;
+  }
+  .note b { color: var(--text); }
+
+  .submit-btn {
+    width: 100%;
+    margin-top: 26px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    padding: 17px;
+    font-size: 17px;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .submit-btn:hover { background: var(--accent-hover); }
+  .submit-btn:disabled { opacity: .6; cursor: not-allowed; }
+
+  .banner {
+    margin-top: 16px;
+    border-radius: 10px;
+    padding: 13px 14px;
+    font-size: 14px;
+    display: none;
+    line-height: 1.6;
+  }
+  .banner.show { display: block; }
+  .banner.success { background: rgba(47,191,113,0.12); border: 1px solid var(--success); color: #7fe3ab; }
+  .banner.error { background: rgba(226,75,75,0.12); border: 1px solid var(--danger); color: #f29c9c; }
+
+  input[type="file"] { display: none; }
+  audio { width: 100%; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="top-row">
+    <h1>ڕاپۆرتکردنی کێشە</h1>
+    <span class="badge">پۆرتەلی هاوڵاتی</span>
+  </div>
+  <p class="subtitle">یارمەتیمان بدە بۆ ناسینەوەی کێشەکانی شارەکەت</p>
+
+  <form id="report-form">
+    <label>شوێن</label>
+    <div class="location-box">
+      <span class="location-status" id="location-status">
+        <span class="dot pending" id="location-dot"></span>
+        <span id="location-text">وەرگرتنی شوێن...</span>
+      </span>
+      <button type="button" class="retry-btn" id="location-retry" style="display:none;">هەوڵدانەوە</button>
+    </div>
+
+    <label for="description">کێشەکە باس بکە</label>
+    <textarea id="description" placeholder="بۆ نموونە: ئاو لە شەقام کۆبووەتەوە و ڕێگا داخستووە نزیک بازاڕ."></textarea>
+
+    <div class="two-col">
+      <button type="button" class="dashed-btn" id="photo-btn">
+        <span class="icon">📷</span>
+        <span>وێنە زیاد بکە</span>
+      </button>
+      <button type="button" class="dashed-btn" id="voice-btn">
+        <span class="icon">🎙️</span>
+        <span id="voice-btn-label">دەنگ تۆمار بکە</span>
+      </button>
+    </div>
+    <div class="two-col" style="margin-top:0;">
+      <span class="hint" id="photo-hint">هیچ وێنەیەک هەڵنەبژێردراوە</span>
+      <span class="hint" id="voice-hint">تۆمارکردنی ڕاپۆرتی دەنگی</span>
+    </div>
+    <audio id="audio-preview" controls style="display:none;"></audio>
+
+    <input type="file" id="photo-input" accept="image/*" capture="environment">
+
+    <div class="note">
+      <b>تێبینی:</b> وێنە و دەنگ و شوێنەکەت بۆ سێرڤەرەکەمان دەنێردرێت و پاشەکەوت دەکرێت بۆ چارەسەرکردنی کێشەکە. زانیاریەکانت تەنها بۆ ئەم مەبەستە بەکاردێت.
+    </div>
+
+    <button type="submit" class="submit-btn" id="submit-btn">
+      <span>ناردنی ڕاپۆرت</span>
+      <span>←</span>
+    </button>
+
+    <div class="banner success" id="success-banner">ڕاپۆرتەکەت بە سەرکەوتوویی نێردرا. سوپاس بۆ یارمەتیدانت!</div>
+    <div class="banner error" id="error-banner"></div>
+  </form>
+</div>
+
+<script>
+const API_BASE = ""; // same origin
+
+let currentLocation = { lat: null, lng: null, accuracy: null };
+let selectedPhoto = null;
+let recordedAudioBlob = null;
+let mediaRecorder = null;
+let mediaChunks = [];
+let recordStartTime = null;
+let recordTimerInterval = null;
+
+// ---------- location ----------
+function requestLocation() {
+  const dot = document.getElementById("location-dot");
+  const text = document.getElementById("location-text");
+  const retry = document.getElementById("location-retry");
+
+  dot.className = "dot pending";
+  text.textContent = "وەرگرتنی شوێن...";
+  retry.style.display = "none";
+
+  if (!("geolocation" in navigator)) {
+    dot.className = "dot err";
+    text.textContent = "ڕاژەکار پشتگیری شوێن ناکات";
+    retry.style.display = "inline-block";
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      currentLocation.lat = pos.coords.latitude;
+      currentLocation.lng = pos.coords.longitude;
+      currentLocation.accuracy = pos.coords.accuracy;
+      dot.className = "dot ok";
+      text.textContent = "شوێن دیاری کرا ✓ (" + pos.coords.latitude.toFixed(4) + ", " + pos.coords.longitude.toFixed(4) + ")";
+      retry.style.display = "none";
+    },
+    (err) => {
+      dot.className = "dot err";
+      text.textContent = "شوێن بەردەست نییە - دەتوانیت بەبێ شوێن بینێریت";
+      retry.style.display = "inline-block";
+    },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+  );
+}
+document.getElementById("location-retry").addEventListener("click", requestLocation);
+
+// ---------- photo ----------
+const photoBtn = document.getElementById("photo-btn");
+const photoInput = document.getElementById("photo-input");
+const photoHint = document.getElementById("photo-hint");
+
+photoBtn.addEventListener("click", () => photoInput.click());
+photoInput.addEventListener("change", () => {
+  if (photoInput.files && photoInput.files[0]) {
+    selectedPhoto = photoInput.files[0];
+    photoBtn.classList.add("active");
+    photoHint.textContent = selectedPhoto.name;
+  } else {
+    selectedPhoto = null;
+    photoBtn.classList.remove("active");
+    photoHint.textContent = "هیچ وێنەیەک هەڵنەبژێردراوە";
+  }
+});
+
+// ---------- voice ----------
+const voiceBtn = document.getElementById("voice-btn");
+const voiceBtnLabel = document.getElementById("voice-btn-label");
+const voiceHint = document.getElementById("voice-hint");
+const audioPreview = document.getElementById("audio-preview");
+
+function formatTime(ms) {
+  const s = Math.floor(ms / 1000);
+  return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+}
+
+async function startRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaChunks = [];
+    const options = MediaRecorder.isTypeSupported("audio/webm")
+      ? { mimeType: "audio/webm" }
+      : {};
+    mediaRecorder = new MediaRecorder(stream, options);
+
+    mediaRecorder.addEventListener("dataavailable", (e) => {
+      if (e.data.size > 0) mediaChunks.push(e.data);
+    });
+
+    mediaRecorder.addEventListener("stop", () => {
+      recordedAudioBlob = new Blob(mediaChunks, { type: mediaRecorder.mimeType || "audio/webm" });
+      audioPreview.src = URL.createObjectURL(recordedAudioBlob);
+      audioPreview.style.display = "block";
+      stream.getTracks().forEach((t) => t.stop());
+      clearInterval(recordTimerInterval);
+      voiceBtn.classList.remove("recording");
+      voiceBtn.classList.add("active");
+      voiceBtnLabel.textContent = "دەنگ تۆمار بکەرەوە";
+      voiceHint.textContent = "دەنگ تۆمارکرا (" + formatTime(Date.now() - recordStartTime) + ")";
+    });
+
+    mediaRecorder.start();
+    recordStartTime = Date.now();
+    voiceBtn.classList.add("recording");
+    voiceBtnLabel.textContent = "ڕاگرتنی تۆمارکردن";
+    voiceHint.textContent = "تۆمارکردن... 00:00";
+    recordTimerInterval = setInterval(() => {
+      voiceHint.textContent = "تۆمارکردن... " + formatTime(Date.now() - recordStartTime);
+    }, 250);
+  } catch (err) {
+    voiceHint.textContent = "دەستگەیشتن بە مایکرۆفۆن مەردوو بوو";
+  }
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state !== "inactive") {
+    mediaRecorder.stop();
+  }
+}
+
+voiceBtn.addEventListener("click", () => {
+  if (mediaRecorder && mediaRecorder.state === "recording") {
+    stopRecording();
+  } else {
+    startRecording();
+  }
+});
+
+// ---------- submit ----------
+const form = document.getElementById("report-form");
+const submitBtn = document.getElementById("submit-btn");
+const successBanner = document.getElementById("success-banner");
+const errorBanner = document.getElementById("error-banner");
+
+function resetForm() {
+  form.reset();
+  selectedPhoto = null;
+  recordedAudioBlob = null;
+  photoBtn.classList.remove("active");
+  photoHint.textContent = "هیچ وێنەیەک هەڵنەبژێردراوە";
+  voiceBtn.classList.remove("active", "recording");
+  voiceBtnLabel.textContent = "دەنگ تۆمار بکە";
+  voiceHint.textContent = "تۆمارکردنی ڕاپۆرتی دەنگی";
+  audioPreview.style.display = "none";
+}
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  successBanner.classList.remove("show");
+  errorBanner.classList.remove("show");
+
+  const description = document.getElementById("description").value.trim();
+
+  if (!description && !selectedPhoto && !recordedAudioBlob) {
+    errorBanner.textContent = "تکایە دەقێک بنووسە، یان وێنەیەک زیاد بکە، یان دەنگێک تۆمار بکە.";
+    errorBanner.classList.add("show");
+    return;
+  }
+
+  const fd = new FormData();
+  if (description) fd.append("description", description);
+  if (currentLocation.lat != null) {
+    fd.append("lat", currentLocation.lat);
+    fd.append("lng", currentLocation.lng);
+    fd.append("accuracy", currentLocation.accuracy);
+  }
+  if (selectedPhoto) fd.append("photo", selectedPhoto);
+  if (recordedAudioBlob) fd.append("audio", recordedAudioBlob, "voice-note.webm");
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = "ناردن...";
+
+  try {
+    const res = await fetch(API_BASE + "/api/reports", { method: "POST", body: fd });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "هەڵەیەک ڕوویدا");
+    }
+    successBanner.classList.add("show");
+    resetForm();
+    requestLocation();
+  } catch (err) {
+    errorBanner.textContent = "هەڵەیەک ڕوویدا لە ناردنی ڕاپۆرتەکە. تکایە دووبارە هەوڵ بدەوە.";
+    errorBanner.classList.add("show");
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<span>ناردنی ڕاپۆرت</span><span>←</span>';
+  }
+});
+
+requestLocation();
+</script>
+</body>
+</html>
