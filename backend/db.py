@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS reports (
     lat             DOUBLE PRECISION,
     lng             DOUBLE PRECISION,
     location_accuracy DOUBLE PRECISION,
+    location_label  TEXT,
     photo_path      TEXT,
     audio_path      TEXT,
     status          TEXT NOT NULL DEFAULT 'new',
@@ -63,6 +64,7 @@ CREATE TABLE IF NOT EXISTS reports (
     lat             REAL,
     lng             REAL,
     location_accuracy REAL,
+    location_label  TEXT,
     photo_path      TEXT,
     audio_path      TEXT,
     status          TEXT NOT NULL DEFAULT 'new',
@@ -74,26 +76,37 @@ CREATE TABLE IF NOT EXISTS reports (
 def init_db():
     with engine.begin() as conn:
         conn.execute(text(SCHEMA))
+    # Best-effort migration for databases created before location_label existed.
+    # Run in its own transaction so a "column already exists" error here can
+    # never roll back the CREATE TABLE above.
+    try:
+        with engine.begin() as conn:
+            if IS_POSTGRES:
+                conn.execute(text("ALTER TABLE reports ADD COLUMN IF NOT EXISTS location_label TEXT"))
+            else:
+                conn.execute(text("ALTER TABLE reports ADD COLUMN location_label TEXT"))
+    except Exception:
+        pass
 
 
-def insert_report(category, description, lat, lng, accuracy, photo_path, audio_path):
+def insert_report(category, description, lat, lng, accuracy, location_label, photo_path, audio_path):
     created_at = datetime.now(timezone.utc).isoformat()
     with engine.begin() as conn:
         row = conn.execute(
             text(
                 """
                 INSERT INTO reports
-                    (created_at, category, description, lat, lng, location_accuracy,
+                    (created_at, category, description, lat, lng, location_accuracy, location_label,
                      photo_path, audio_path, status)
                 VALUES
-                    (:created_at, :category, :description, :lat, :lng, :accuracy,
+                    (:created_at, :category, :description, :lat, :lng, :accuracy, :location_label,
                      :photo_path, :audio_path, 'new')
                 RETURNING id
                 """
             ),
             {
                 "created_at": created_at, "category": category, "description": description,
-                "lat": lat, "lng": lng, "accuracy": accuracy,
+                "lat": lat, "lng": lng, "accuracy": accuracy, "location_label": location_label,
                 "photo_path": photo_path, "audio_path": audio_path,
             },
         ).fetchone()
@@ -105,7 +118,7 @@ def list_reports(limit=200, offset=0):
         rows = conn.execute(
             text(
                 """
-                SELECT id, created_at, category, description, lat, lng, location_accuracy,
+                SELECT id, created_at, category, description, lat, lng, location_accuracy, location_label,
                        photo_path, audio_path, status
                 FROM reports
                 ORDER BY created_at DESC
@@ -176,7 +189,7 @@ def export_csv():
         rows = conn.execute(
             text(
                 """
-                SELECT id, created_at, category, description, lat, lng, location_accuracy,
+                SELECT id, created_at, category, description, lat, lng, location_accuracy, location_label,
                        photo_path, audio_path, status
                 FROM reports
                 ORDER BY id ASC
@@ -188,12 +201,12 @@ def export_csv():
     writer = csv.writer(buf)
     writer.writerow(
         ["id", "created_at", "category", "category_label", "description",
-         "lat", "lng", "location_accuracy", "photo_path", "audio_path", "status"]
+         "lat", "lng", "location_accuracy", "location_label", "photo_path", "audio_path", "status"]
     )
     for r in rows:
         category_label = CATEGORIES.get(r[2], "پۆلێنی نەکراو") if r[2] else "پۆلێنی نەکراو"
         writer.writerow([
             r[0], r[1], r[2], category_label, r[3],
-            r[4], r[5], r[6], r[7], r[8], r[9],
+            r[4], r[5], r[6], r[7], r[8], r[9], r[10],
         ])
     return buf.getvalue()
