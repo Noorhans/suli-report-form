@@ -306,7 +306,7 @@
       <button type="button" class="retry-btn" id="location-retry" style="display:none;">هەوڵدانەوە</button>
     </div>
     <input type="text" class="location-label-input" id="location-label-input" placeholder="ناوی گەڕەک یان شەقام (بۆ نموونە: ڕاپەڕین)">
-    <div class="location-caption">ئەگەر ناونیشانەکە ڕاست نییە دەتوانیت بیگۆڕیت · شوێن لەلایەن OpenStreetMap پشتگیری دەکرێت</div>
+    <div class="location-caption">ئەگەر ناونیشانەکە ڕاست نییە دەتوانیت بیگۆڕیت · شوێن لەلایەن Google Maps (و OpenStreetMap وەک پاڵپشت) پشتگیری دەکرێت</div>
 
     <label for="description">کێشەکە باس بکە</label>
     <textarea id="description" placeholder="بۆ نموونە: ئاو لە شەقام کۆبووەتەوە و ڕێگا داخستووە نزیک بازاڕ."></textarea>
@@ -366,34 +366,16 @@ let recordStartTime = null;
 let recordTimerInterval = null;
 
 // ---------- location ----------
-// Many roads in this region are only tagged with plot/block codes in
-// OpenStreetMap (e.g. "102-7") instead of a real street name - those aren't
-// useful to show, so skip anything that's just digits/dashes/slashes.
-function isCodeLikeRoad(v) {
-  return !v || /^[\d\s\-\/]+$/.test(v);
-}
-
-function buildAddressLabel(addr) {
-  if (!addr) return null;
-  const parts = [];
-  if (addr.road && !isCodeLikeRoad(addr.road)) parts.push(addr.road);
-  const neighbourhood = addr.neighbourhood || addr.suburb || addr.quarter || addr.city_district;
-  if (neighbourhood && neighbourhood !== addr.road) parts.push(neighbourhood);
-  const city = addr.city || addr.town || addr.village;
-  if (city && city !== neighbourhood) parts.push(city);
-  if (!parts.length && addr.county) parts.push(addr.county);
-  if (!parts.length && addr.state) parts.push(addr.state);
-  return parts.length ? parts.join("، ") : null;
-}
-
+// The actual lookup runs on our own server (see /api/geocode) so the Google
+// Maps API key never has to live in this page's source. The server tries
+// Google first for better street/neighborhood coverage, and falls back to
+// OpenStreetMap automatically if Google isn't configured or fails.
 async function reverseGeocode(lat, lng) {
   try {
-    const url = "https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=" + lat +
-      "&lon=" + lng + "&zoom=17&addressdetails=1&accept-language=ckb,ar,en";
-    const res = await fetch(url, { headers: { "Accept": "application/json" } });
+    const res = await fetch(API_BASE + "/api/geocode?lat=" + lat + "&lng=" + lng);
     if (!res.ok) return null;
     const data = await res.json();
-    return buildAddressLabel(data.address) || data.display_name || null;
+    return data.label || null;
   } catch (e) {
     return null;
   }
