@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
 import db
+import geocode
 from config import (
     CATEGORIES, DATA_DIR, PHOTOS_DIR, AUDIO_DIR, MAX_UPLOAD_BYTES, BASE_DIR,
 )
@@ -126,6 +127,14 @@ def create_report(
         },
         status_code=201,
     )
+
+
+@app.get("/api/geocode")
+async def get_geocode(lat: float, lng: float):
+    """Reverse-geocode a point into a human-readable place name, used to
+    pre-fill (but never lock) the location field in the report form."""
+    label, source = await geocode.reverse_geocode(lat, lng)
+    return {"label": label, "source": source}
 
 
 @app.get("/api/reports")
