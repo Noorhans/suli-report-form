@@ -160,6 +160,69 @@
     margin-top: 8px;
     min-height: 16px;
   }
+  .hint a.remove-link {
+    color: var(--danger);
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .location-caption {
+    font-size: 11px;
+    color: var(--text-mute, #6f7280);
+    margin-top: 6px;
+    text-align: right;
+  }
+  .photo-preview-wrap {
+    display: none;
+    margin-top: 10px;
+    position: relative;
+  }
+  .photo-preview-wrap img {
+    width: 100%;
+    max-height: 220px;
+    object-fit: cover;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    display: block;
+  }
+  .media-remove-btn {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    background: rgba(0,0,0,0.65);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .audio-preview-wrap {
+    display: none;
+    margin-top: 8px;
+  }
+  .audio-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .audio-row audio { margin-top: 0; flex: 1; min-width: 0; }
+  .audio-remove-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--danger);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    flex-shrink: 0;
+  }
+  .audio-remove-btn:hover { border-color: var(--danger); }
 
   .note {
     margin-top: 22px;
@@ -226,6 +289,7 @@
       </span>
       <button type="button" class="retry-btn" id="location-retry" style="display:none;">هەوڵدانەوە</button>
     </div>
+    <div class="location-caption">شوێن لەلایەن OpenStreetMap پشتگیری دەکرێت</div>
 
     <label for="description">کێشەکە باس بکە</label>
     <textarea id="description" placeholder="بۆ نموونە: ئاو لە شەقام کۆبووەتەوە و ڕێگا داخستووە نزیک بازاڕ."></textarea>
@@ -244,7 +308,18 @@
       <span class="hint" id="photo-hint">هیچ وێنەیەک هەڵنەبژێردراوە</span>
       <span class="hint" id="voice-hint">تۆمارکردنی ڕاپۆرتی دەنگی</span>
     </div>
-    <audio id="audio-preview" controls style="display:none;"></audio>
+
+    <div class="photo-preview-wrap" id="photo-preview-wrap">
+      <img id="photo-preview" alt="">
+      <button type="button" class="media-remove-btn" id="photo-remove-btn" title="سڕینەوەی وێنە">✕</button>
+    </div>
+
+    <div class="audio-preview-wrap" id="audio-preview-wrap">
+      <div class="audio-row">
+        <audio id="audio-preview" controls></audio>
+        <button type="button" class="audio-remove-btn" id="audio-remove-btn">سڕینەوە</button>
+      </div>
+    </div>
 
     <input type="file" id="photo-input" accept="image/*" capture="environment">
 
@@ -265,7 +340,7 @@
 <script>
 const API_BASE = ""; // same origin
 
-let currentLocation = { lat: null, lng: null, accuracy: null };
+let currentLocation = { lat: null, lng: null, accuracy: null, label: null };
 let selectedPhoto = null;
 let recordedAudioBlob = null;
 let mediaRecorder = null;
@@ -274,6 +349,31 @@ let recordStartTime = null;
 let recordTimerInterval = null;
 
 // ---------- location ----------
+function buildAddressLabel(addr) {
+  if (!addr) return null;
+  const parts = [];
+  if (addr.road) parts.push(addr.road);
+  const neighbourhood = addr.neighbourhood || addr.suburb || addr.quarter || addr.city_district;
+  if (neighbourhood && neighbourhood !== addr.road) parts.push(neighbourhood);
+  const city = addr.city || addr.town || addr.village;
+  if (city && city !== neighbourhood) parts.push(city);
+  if (!parts.length && addr.state) parts.push(addr.state);
+  return parts.length ? parts.join("، ") : null;
+}
+
+async function reverseGeocode(lat, lng) {
+  try {
+    const url = "https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=" + lat +
+      "&lon=" + lng + "&zoom=17&addressdetails=1&accept-language=ckb,ar,en";
+    const res = await fetch(url, { headers: { "Accept": "application/json" } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return buildAddressLabel(data.address) || data.display_name || null;
+  } catch (e) {
+    return null;
+  }
+}
+
 function requestLocation() {
   const dot = document.getElementById("location-dot");
   const text = document.getElementById("location-text");
@@ -282,6 +382,7 @@ function requestLocation() {
   dot.className = "dot pending";
   text.textContent = "وەرگرتنی شوێن...";
   retry.style.display = "none";
+  currentLocation.label = null;
 
   if (!("geolocation" in navigator)) {
     dot.className = "dot err";
@@ -291,13 +392,25 @@ function requestLocation() {
   }
 
   navigator.geolocation.getCurrentPosition(
-    (pos) => {
+    async (pos) => {
       currentLocation.lat = pos.coords.latitude;
       currentLocation.lng = pos.coords.longitude;
       currentLocation.accuracy = pos.coords.accuracy;
+      const coordsText = "(" + pos.coords.latitude.toFixed(4) + ", " + pos.coords.longitude.toFixed(4) + ")";
       dot.className = "dot ok";
-      text.textContent = "شوێن دیاری کرا ✓ (" + pos.coords.latitude.toFixed(4) + ", " + pos.coords.longitude.toFixed(4) + ")";
+      text.textContent = "شوێن دیاری کرا ✓ " + coordsText;
       retry.style.display = "none";
+
+      text.textContent = "وەرگرتنی ناونیشان...";
+      const label = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+      // Ignore a stale reverse-geocode result if the location has since changed/retried.
+      if (currentLocation.lat !== pos.coords.latitude || currentLocation.lng !== pos.coords.longitude) return;
+      if (label) {
+        currentLocation.label = label;
+        text.textContent = "✓ " + label;
+      } else {
+        text.textContent = "شوێن دیاری کرا ✓ " + coordsText;
+      }
     },
     (err) => {
       dot.className = "dot err";
@@ -313,18 +426,46 @@ document.getElementById("location-retry").addEventListener("click", requestLocat
 const photoBtn = document.getElementById("photo-btn");
 const photoInput = document.getElementById("photo-input");
 const photoHint = document.getElementById("photo-hint");
+const photoBtnLabel = photoBtn.querySelector("span:last-child");
+const photoPreviewWrap = document.getElementById("photo-preview-wrap");
+const photoPreviewImg = document.getElementById("photo-preview");
+const photoRemoveBtn = document.getElementById("photo-remove-btn");
+let photoPreviewUrl = null;
 
+function clearPhoto() {
+  selectedPhoto = null;
+  photoInput.value = ""; // allow re-selecting the same file
+  if (photoPreviewUrl) {
+    URL.revokeObjectURL(photoPreviewUrl);
+    photoPreviewUrl = null;
+  }
+  photoBtn.classList.remove("active");
+  photoBtnLabel.textContent = "وێنە زیاد بکە";
+  photoHint.textContent = "هیچ وێنەیەک هەڵنەبژێردراوە";
+  photoPreviewWrap.style.display = "none";
+}
+
+// Clicking the button always (re)opens the picker, so taking a new photo
+// after already having one — a retake — just works.
 photoBtn.addEventListener("click", () => photoInput.click());
 photoInput.addEventListener("change", () => {
   if (photoInput.files && photoInput.files[0]) {
     selectedPhoto = photoInput.files[0];
     photoBtn.classList.add("active");
+    photoBtnLabel.textContent = "گۆڕینی وێنە";
     photoHint.textContent = selectedPhoto.name;
+
+    if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+    photoPreviewUrl = URL.createObjectURL(selectedPhoto);
+    photoPreviewImg.src = photoPreviewUrl;
+    photoPreviewWrap.style.display = "block";
   } else {
-    selectedPhoto = null;
-    photoBtn.classList.remove("active");
-    photoHint.textContent = "هیچ وێنەیەک هەڵنەبژێردراوە";
+    clearPhoto();
   }
+});
+photoRemoveBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  clearPhoto();
 });
 
 // ---------- voice ----------
@@ -332,6 +473,23 @@ const voiceBtn = document.getElementById("voice-btn");
 const voiceBtnLabel = document.getElementById("voice-btn-label");
 const voiceHint = document.getElementById("voice-hint");
 const audioPreview = document.getElementById("audio-preview");
+const audioPreviewWrap = document.getElementById("audio-preview-wrap");
+const audioRemoveBtn = document.getElementById("audio-remove-btn");
+let audioPreviewUrl = null;
+
+function clearAudio() {
+  recordedAudioBlob = null;
+  if (audioPreviewUrl) {
+    URL.revokeObjectURL(audioPreviewUrl);
+    audioPreviewUrl = null;
+  }
+  audioPreview.removeAttribute("src");
+  audioPreviewWrap.style.display = "none";
+  voiceBtn.classList.remove("active", "recording");
+  voiceBtnLabel.textContent = "دەنگ تۆمار بکە";
+  voiceHint.textContent = "تۆمارکردنی ڕاپۆرتی دەنگی";
+}
+audioRemoveBtn.addEventListener("click", clearAudio);
 
 function formatTime(ms) {
   const s = Math.floor(ms / 1000);
@@ -353,18 +511,22 @@ async function startRecording() {
 
     mediaRecorder.addEventListener("stop", () => {
       recordedAudioBlob = new Blob(mediaChunks, { type: mediaRecorder.mimeType || "audio/webm" });
-      audioPreview.src = URL.createObjectURL(recordedAudioBlob);
-      audioPreview.style.display = "block";
+      if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
+      audioPreviewUrl = URL.createObjectURL(recordedAudioBlob);
+      audioPreview.src = audioPreviewUrl;
+      audioPreviewWrap.style.display = "block";
       stream.getTracks().forEach((t) => t.stop());
       clearInterval(recordTimerInterval);
       voiceBtn.classList.remove("recording");
       voiceBtn.classList.add("active");
-      voiceBtnLabel.textContent = "دەنگ تۆمار بکەرەوە";
+      voiceBtnLabel.textContent = "دووبارە تۆمار بکە";
       voiceHint.textContent = "دەنگ تۆمارکرا (" + formatTime(Date.now() - recordStartTime) + ")";
     });
 
     mediaRecorder.start();
     recordStartTime = Date.now();
+    audioPreviewWrap.style.display = "none";
+    voiceBtn.classList.remove("active");
     voiceBtn.classList.add("recording");
     voiceBtnLabel.textContent = "ڕاگرتنی تۆمارکردن";
     voiceHint.textContent = "تۆمارکردن... 00:00";
@@ -398,14 +560,8 @@ const errorBanner = document.getElementById("error-banner");
 
 function resetForm() {
   form.reset();
-  selectedPhoto = null;
-  recordedAudioBlob = null;
-  photoBtn.classList.remove("active");
-  photoHint.textContent = "هیچ وێنەیەک هەڵنەبژێردراوە";
-  voiceBtn.classList.remove("active", "recording");
-  voiceBtnLabel.textContent = "دەنگ تۆمار بکە";
-  voiceHint.textContent = "تۆمارکردنی ڕاپۆرتی دەنگی";
-  audioPreview.style.display = "none";
+  clearPhoto();
+  clearAudio();
 }
 
 form.addEventListener("submit", async (e) => {
@@ -427,6 +583,7 @@ form.addEventListener("submit", async (e) => {
     fd.append("lat", currentLocation.lat);
     fd.append("lng", currentLocation.lng);
     fd.append("accuracy", currentLocation.accuracy);
+    if (currentLocation.label) fd.append("location_label", currentLocation.label);
   }
   if (selectedPhoto) fd.append("photo", selectedPhoto);
   if (recordedAudioBlob) fd.append("audio", recordedAudioBlob, "voice-note.webm");
