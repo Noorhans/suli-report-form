@@ -9,10 +9,13 @@ fails for any reason - so the feature keeps working even before the key is
 set up, and never hard-fails the request if Google is briefly unavailable.
 """
 
+import logging
 import os
 import re
 
 import httpx
+
+logger = logging.getLogger("geocode")
 
 GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
 
@@ -94,9 +97,11 @@ async def _geocode_google(lat, lng):
             )
         data = res.json()
         if data.get("status") != "OK" or not data.get("results"):
+            logger.warning("google geocode non-OK status: %s", data.get("status"))
             return None
         return _build_google_label(data["results"][0].get("address_components", []))
-    except Exception:
+    except Exception as e:
+        logger.warning("google geocode failed: %r", e)
         return None
 
 
@@ -116,7 +121,8 @@ async def _geocode_osm(lat, lng):
             )
         data = res.json()
         return _build_osm_label(data.get("address")) or data.get("display_name")
-    except Exception:
+    except Exception as e:
+        logger.warning("osm geocode failed: %r", e)
         return None
 
 
