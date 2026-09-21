@@ -1,0 +1,9 @@
+data/reports.db
+data/uploads/photos/*
+data/uploads/audio/*
+!data/uploads/photos/.gitkeep
+!data/uploads/audio/.gitkeep
+__pycache__/
+*.pyc
+.venv/
+venv/
