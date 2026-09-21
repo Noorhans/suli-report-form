@@ -82,6 +82,7 @@ def create_report(
     lat: Optional[float] = Form(None),
     lng: Optional[float] = Form(None),
     accuracy: Optional[float] = Form(None),
+    location_label: Optional[str] = Form(None),
     photo: Optional[UploadFile] = File(None),
     audio: Optional[UploadFile] = File(None),
 ):
@@ -95,6 +96,7 @@ def create_report(
         raise HTTPException(400, f"Unknown category '{category}'")
 
     description = (description or "").strip() or None
+    location_label = (location_label or "").strip() or None
 
     if not description and not photo and not audio:
         raise HTTPException(
@@ -106,7 +108,7 @@ def create_report(
     audio_path = _save_upload(audio, AUDIO_DIR) if audio and audio.filename else None
 
     report_id, created_at = db.insert_report(
-        category, description, lat, lng, accuracy, photo_path, audio_path
+        category, description, lat, lng, accuracy, location_label, photo_path, audio_path
     )
 
     return JSONResponse(
@@ -118,6 +120,7 @@ def create_report(
             "description": description,
             "lat": lat,
             "lng": lng,
+            "location_label": location_label,
             "photo_path": photo_path,
             "audio_path": audio_path,
         },
