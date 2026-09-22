@@ -332,7 +332,7 @@
     <div class="two-col">
       <div class="dashed-btn" id="photo-cell">
         <span class="icon">📷</span>
-        <span>وێنە</span>
+        <span>وێنە <span style="color:var(--danger);">*</span></span>
         <div class="photo-choice-row">
           <button type="button" class="choice-btn" id="camera-btn">📷 وێنەگرتن</button>
           <button type="button" class="choice-btn" id="gallery-btn">🖼️ گالەری</button>
@@ -657,8 +657,15 @@ form.addEventListener("submit", async (e) => {
 
   const description = document.getElementById("description").value.trim();
 
-  if (!description && !selectedPhoto && !recordedAudioBlob) {
-    errorBanner.textContent = "تکایە دەقێک بنووسە، یان وێنەیەک زیاد بکە، یان دەنگێک تۆمار بکە.";
+  // Photo is now always required, plus either a written description or a
+  // voice recording (or both) - matches the backend's validation below.
+  if (!selectedPhoto) {
+    errorBanner.textContent = "تکایە وێنەیەک زیاد بکە - وێنە پێویستە بۆ هەموو ڕاپۆرتەکان.";
+    errorBanner.classList.add("show");
+    return;
+  }
+  if (!description && !recordedAudioBlob) {
+    errorBanner.textContent = "لەگەڵ وێنەکەدا، تکایە وەسفێک بنووسە یان دەنگێک تۆمار بکە.";
     errorBanner.classList.add("show");
     return;
   }
