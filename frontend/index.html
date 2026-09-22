@@ -323,7 +323,8 @@
       </span>
       <button type="button" class="retry-btn" id="location-retry" style="display:none;">هەوڵدانەوە</button>
     </div>
-    <input type="text" class="location-label-input" id="location-label-input" placeholder="ناوی گەڕەک یان شەقام (بۆ نموونە: ڕاپەڕین)">
+    <label for="location-label-input">ناوی گەڕەک یان شەقام <span style="color:var(--danger);">*</span></label>
+    <input type="text" class="location-label-input" id="location-label-input" placeholder="بۆ نموونە: ڕاپەڕین">
     <div class="location-caption">ئەگەر ناونیشانەکە ڕاست نییە دەتوانیت بیگۆڕیت · شوێن لەلایەن Google Maps (و OpenStreetMap وەک پاڵپشت) پشتگیری دەکرێت</div>
 
     <label for="description">کێشەکە باس بکە</label>
@@ -656,11 +657,18 @@ form.addEventListener("submit", async (e) => {
   errorBanner.classList.remove("show");
 
   const description = document.getElementById("description").value.trim();
+  const locationLabel = locationLabelInput.value.trim();
 
   // Photo is now always required, plus either a written description or a
-  // voice recording (or both) - matches the backend's validation below.
+  // voice recording (or both), plus the street/neighborhood name - matches
+  // the backend's validation below.
   if (!selectedPhoto) {
     errorBanner.textContent = "تکایە وێنەیەک زیاد بکە - وێنە پێویستە بۆ هەموو ڕاپۆرتەکان.";
+    errorBanner.classList.add("show");
+    return;
+  }
+  if (!locationLabel) {
+    errorBanner.textContent = "تکایە ناوی گەڕەک یان شەقام بنووسە.";
     errorBanner.classList.add("show");
     return;
   }
@@ -679,8 +687,7 @@ form.addEventListener("submit", async (e) => {
   }
   // The label is independent of GPS success - the citizen can type it by
   // hand even if location access failed or the auto-guess was wrong.
-  const locationLabel = locationLabelInput.value.trim();
-  if (locationLabel) fd.append("location_label", locationLabel);
+  fd.append("location_label", locationLabel);
   if (selectedPhoto) fd.append("photo", selectedPhoto);
   if (recordedAudioBlob) fd.append("audio", recordedAudioBlob, "voice-note.webm");
 
