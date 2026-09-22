@@ -315,7 +315,7 @@
   <p class="subtitle">یارمەتیمان بدە بۆ ناسینەوەی کێشەکانی شارەکەت</p>
 
   <form id="report-form">
-    <label for="coords-input">کۆردینەیت (لە Google Maps)</label>
+    <label for="coords-input">کۆردینەیت (لە Google Maps) <span style="color:var(--danger);">*</span></label>
     <input type="text" class="location-label-input" id="coords-input" placeholder="کۆردینەیت یان لینکی Google Maps بلکێنە (بۆ نموونە: 36.1911, 44.0092)">
     <div class="location-box" style="margin-top:8px;">
       <span class="location-status" id="location-status">
@@ -327,7 +327,7 @@
 
     <label for="location-label-input">ناوی گەڕەک یان شەقام <span style="color:var(--danger);">*</span></label>
     <input type="text" class="location-label-input" id="location-label-input" placeholder="بۆ نموونە: ڕاپەڕین">
-    <div class="location-caption">بە کۆردینەیتەکە خۆکارانە پڕدەبێتەوە - دەتوانیت بیگۆڕیت ئەگەر هەڵەیە</div>
+    <div class="location-caption">بە کۆردینەیتەکە خۆکارانە پڕدەبێتەوە - ئەگەر خۆکارانە دروست نەبوو تکایە بە دەست بینووسە</div>
 
     <label for="description">کێشەکە باس بکە</label>
     <textarea id="description" placeholder="بۆ نموونە: ئاو لە شەقام کۆبووەتەوە و ڕێگا داخستووە نزیک بازاڕ."></textarea>
@@ -698,24 +698,45 @@ form.addEventListener("submit", async (e) => {
   const description = document.getElementById("description").value.trim();
   const locationLabel = locationLabelInput.value.trim();
 
-  // Photo is now always required, plus either a written description or a
-  // voice recording (or both), plus the street/neighborhood name - matches
-  // the backend's validation below.
+  // Re-parse the coordinate box synchronously in case they typed/pasted
+  // into it and hit submit before the field lost focus (the "change"/
+  // "blur" handlers above are what normally update currentLocation, but
+  // parsing itself doesn't need to wait for those events - only the
+  // reverse-geocode auto-fill does).
+  const typedCoords = coordsInput.value.trim();
+  if (typedCoords) {
+    const parsed = parseCoordinates(typedCoords);
+    if (parsed) {
+      currentLocation.lat = parsed.lat;
+      currentLocation.lng = parsed.lng;
+    }
+  }
+
+  // Photo, the pasted coordinate, and the street/neighborhood name are all
+  // required now, plus either a written description or a voice recording
+  // (or both) - matches the backend's validation below. The coordinate is
+  // meant to be manually copied from Google Maps (never read automatically
+  // from the device's GPS - see the coordinate-paste handling above), and
+  // is used to auto-fill the street name; if that auto-fill can't resolve
+  // a name, the citizen has to type it in by hand instead - either way
+  // both fields must end up filled in before submitting.
   if (!selectedPhoto) {
     errorBanner.textContent = "تکایە وێنەیەک زیاد بکە - وێنە پێویستە بۆ هەموو ڕاپۆرتەکان.";
     errorBanner.classList.add("show");
     return;
   }
-  // If they typed/pasted something in the coordinates box, it has to parse
-  // - an unparsable coordinate is worse than none, so block submission
-  // rather than silently dropping it.
-  if (coordsInput.value.trim() && currentLocation.lat == null) {
-    errorBanner.textContent = "کۆردینەیتەکە دروست نییە - تکایە لینک یان ژمارەکانی Google Maps بلکێنە یان بۆشایی بهێڵەوە.";
+  if (!coordsInput.value.trim()) {
+    errorBanner.textContent = "تکایە کۆردینەیت لە Google Maps کۆپی و بلکێنە - کۆردینەیت پێویستە بۆ هەموو ڕاپۆرتەکان.";
+    errorBanner.classList.add("show");
+    return;
+  }
+  if (currentLocation.lat == null) {
+    errorBanner.textContent = "کۆردینەیتەکە دروست نییە - تکایە لینک یان ژمارەکانی Google Maps بلکێنە.";
     errorBanner.classList.add("show");
     return;
   }
   if (!locationLabel) {
-    errorBanner.textContent = "تکایە ناوی گەڕەک یان شەقام بنووسە.";
+    errorBanner.textContent = "تکایە ناوی گەڕەک یان شەقام بنووسە - ئەگەر خۆکارانە پڕنەبووەوە بە دەست بینووسە.";
     errorBanner.classList.add("show");
     return;
   }
