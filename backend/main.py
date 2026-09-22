@@ -99,10 +99,17 @@ def create_report(
     description = (description or "").strip() or None
     location_label = (location_label or "").strip() or None
 
-    if not description and not photo and not audio:
+    # A photo is always required, plus either a written description or a
+    # voice recording (or both). Enforced here too, not just in the
+    # frontend, since the frontend check can be bypassed.
+    has_photo = bool(photo and photo.filename)
+    has_audio = bool(audio and audio.filename)
+    if not has_photo:
+        raise HTTPException(400, "A photo is required for every report.")
+    if not description and not has_audio:
         raise HTTPException(
             400,
-            "At least one of description, photo, or audio is required.",
+            "Along with the photo, either a written description or a voice recording is required.",
         )
 
     photo_path = _save_upload(photo, PHOTOS_DIR) if photo and photo.filename else None
