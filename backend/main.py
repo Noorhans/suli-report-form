@@ -99,14 +99,18 @@ def create_report(
     description = (description or "").strip() or None
     location_label = (location_label or "").strip() or None
 
-    # A photo and a street/neighborhood name are always required, plus
-    # either a written description or a voice recording (or both).
-    # Enforced here too, not just in the frontend, since the frontend
-    # check can be bypassed.
+    # A photo, a coordinate (manually copied by the citizen from Google
+    # Maps - never read automatically from the device's GPS), and a
+    # street/neighborhood name are all always required, plus either a
+    # written description or a voice recording (or both). Enforced here
+    # too, not just in the frontend, since the frontend check can be
+    # bypassed.
     has_photo = bool(photo and photo.filename)
     has_audio = bool(audio and audio.filename)
     if not has_photo:
         raise HTTPException(400, "A photo is required for every report.")
+    if lat is None or lng is None:
+        raise HTTPException(400, "A coordinate copied from Google Maps is required for every report.")
     if not location_label:
         raise HTTPException(400, "A street or neighborhood name is required for every report.")
     if not description and not has_audio:
