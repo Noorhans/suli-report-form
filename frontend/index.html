@@ -315,17 +315,19 @@
   <p class="subtitle">یارمەتیمان بدە بۆ ناسینەوەی کێشەکانی شارەکەت</p>
 
   <form id="report-form">
-    <label>شوێن</label>
-    <div class="location-box">
+    <label for="coords-input">کۆردینەیت (لە Google Maps)</label>
+    <input type="text" class="location-label-input" id="coords-input" placeholder="کۆردینەیت یان لینکی Google Maps بلکێنە (بۆ نموونە: 36.1911, 44.0092)">
+    <div class="location-box" style="margin-top:8px;">
       <span class="location-status" id="location-status">
         <span class="dot pending" id="location-dot"></span>
-        <span id="location-text">وەرگرتنی شوێن...</span>
+        <span id="location-text">هیچ کۆردینەیتێک نەدراوە</span>
       </span>
-      <button type="button" class="retry-btn" id="location-retry" style="display:none;">هەوڵدانەوە</button>
     </div>
+    <div class="location-caption">لە Google Maps شوێنی کێشەکە دەستنیشان بکە (نەک ماڵەکەت) · کرتەی درێژ یان ڕاستی کلیک لەسەری بکە و کۆردینەیتەکان کۆپی بکە · پاشان لێرە بیلکێنە</div>
+
     <label for="location-label-input">ناوی گەڕەک یان شەقام <span style="color:var(--danger);">*</span></label>
     <input type="text" class="location-label-input" id="location-label-input" placeholder="بۆ نموونە: ڕاپەڕین">
-    <div class="location-caption">ئەگەر ناونیشانەکە ڕاست نییە دەتوانیت بیگۆڕیت · شوێن لەلایەن Google Maps (و OpenStreetMap وەک پاڵپشت) پشتگیری دەکرێت</div>
+    <div class="location-caption">بە کۆردینەیتەکە خۆکارانە پڕدەبێتەوە - دەتوانیت بیگۆڕیت ئەگەر هەڵەیە</div>
 
     <label for="description">کێشەکە باس بکە</label>
     <textarea id="description" placeholder="بۆ نموونە: ئاو لە شەقام کۆبووەتەوە و ڕێگا داخستووە نزیک بازاڕ."></textarea>
@@ -447,57 +449,89 @@ async function reverseGeocode(lat, lng) {
 
 const locationLabelInput = document.getElementById("location-label-input");
 // True once the citizen has typed/edited the location name themselves -
-// after that we never overwrite it with an automatic guess, even on retry.
+// after that we never overwrite it with an automatic guess.
 let labelEditedByUser = false;
 locationLabelInput.addEventListener("input", () => {
   labelEditedByUser = true;
 });
 
-function requestLocation() {
-  const dot = document.getElementById("location-dot");
-  const text = document.getElementById("location-text");
-  const retry = document.getElementById("location-retry");
+const coordsInput = document.getElementById("coords-input");
+const locationDot = document.getElementById("location-dot");
+const locationText = document.getElementById("location-text");
 
-  dot.className = "dot pending";
-  text.textContent = "وەرگرتنی شوێن...";
-  retry.style.display = "none";
+// We no longer read the device's own GPS automatically - that reads
+// wherever the phone physically is, which is often the citizen's home
+// instead of the actual problem location. Instead the citizen finds the
+// spot on Google Maps themselves and pastes the coordinates (or the whole
+// Maps link) here. This pulls {lat, lng} out of whatever they paste:
+// a plain "lat, lng" pair, or a Google Maps link in any of its common
+// shapes (a share link with "@lat,lng", or a "q=" / "ll=" query param).
+function parseCoordinates(raw) {
+  if (!raw) return null;
+  raw = raw.trim();
+  const patterns = [
+    /@(-?\d+\.\d+),\s*(-?\d+\.\d+)/,
+    /[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/,
+    /[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)/,
+    /(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/,
+  ];
+  for (const re of patterns) {
+    const m = raw.match(re);
+    if (m) {
+      const lat = parseFloat(m[1]);
+      const lng = parseFloat(m[2]);
+      if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+        return { lat, lng };
+      }
+    }
+  }
+  return null;
+}
 
-  if (!("geolocation" in navigator)) {
-    dot.className = "dot err";
-    text.textContent = "ڕاژەکار پشتگیری شوێن ناکات - دەتوانیت ناونیشانەکە بە دەست بنووسیت";
-    retry.style.display = "inline-block";
+// Bumped on every input change so a slow reverse-geocode reply for an
+// earlier (now-replaced) coordinate can't land after a newer one.
+let geocodeRequestId = 0;
+
+async function handleCoordsInput() {
+  const raw = coordsInput.value.trim();
+  const myRequestId = ++geocodeRequestId;
+
+  if (!raw) {
+    currentLocation.lat = null;
+    currentLocation.lng = null;
+    currentLocation.accuracy = null;
+    locationDot.className = "dot pending";
+    locationText.textContent = "هیچ کۆردینەیتێک نەدراوە";
     return;
   }
 
-  navigator.geolocation.getCurrentPosition(
-    async (pos) => {
-      currentLocation.lat = pos.coords.latitude;
-      currentLocation.lng = pos.coords.longitude;
-      currentLocation.accuracy = pos.coords.accuracy;
-      const coordsText = "(" + pos.coords.latitude.toFixed(4) + ", " + pos.coords.longitude.toFixed(4) + ")";
-      dot.className = "dot ok";
-      text.textContent = "شوێن دیاری کرا ✓ " + coordsText;
-      retry.style.display = "none";
+  const coords = parseCoordinates(raw);
+  if (!coords) {
+    currentLocation.lat = null;
+    currentLocation.lng = null;
+    locationDot.className = "dot err";
+    locationText.textContent = "کۆردینەیتەکە دروست نییە - لینک یان ژمارەکانی Google Maps بلکێنە";
+    return;
+  }
 
-      const label = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
-      // Ignore a stale reverse-geocode result if the location has since changed/retried.
-      if (currentLocation.lat !== pos.coords.latitude || currentLocation.lng !== pos.coords.longitude) return;
-      // Never overwrite text the citizen already typed themselves - the
-      // automatic guess is only a starting point, they may know better
-      // (e.g. their area isn't well mapped and they know it as "ڕاپەڕین").
-      if (label && !labelEditedByUser) {
-        locationLabelInput.value = label;
-      }
-    },
-    (err) => {
-      dot.className = "dot err";
-      text.textContent = "شوێن بەردەست نییە - دەتوانیت ناونیشانەکە بە دەست بنووسیت";
-      retry.style.display = "inline-block";
-    },
-    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-  );
+  currentLocation.lat = coords.lat;
+  currentLocation.lng = coords.lng;
+  currentLocation.accuracy = null;
+  locationDot.className = "dot ok";
+  locationText.textContent = "کۆردینەیت وەرگیرا ✓ (" + coords.lat.toFixed(4) + ", " + coords.lng.toFixed(4) + ")";
+
+  // Auto-suggest the street/neighborhood name from the pasted coordinate -
+  // the citizen can still edit it, and once they do we stop overwriting it.
+  const label = await reverseGeocode(coords.lat, coords.lng);
+  if (myRequestId !== geocodeRequestId) return; // a newer paste replaced this one
+  if (label && !labelEditedByUser) {
+    locationLabelInput.value = label;
+  }
 }
-document.getElementById("location-retry").addEventListener("click", requestLocation);
+
+coordsInput.addEventListener("paste", () => setTimeout(handleCoordsInput, 0));
+coordsInput.addEventListener("change", handleCoordsInput);
+coordsInput.addEventListener("blur", handleCoordsInput);
 
 // ---------- photo ----------
 // Two separate hidden inputs, each opened by its own small button, so both
@@ -647,8 +681,13 @@ function resetForm() {
   form.reset();
   clearPhoto();
   clearAudio();
+  coordsInput.value = "";
   locationLabelInput.value = "";
   labelEditedByUser = false;
+  currentLocation = { lat: null, lng: null, accuracy: null, label: null };
+  locationDot.className = "dot pending";
+  locationText.textContent = "هیچ کۆردینەیتێک نەدراوە";
+  geocodeRequestId++; // cancel any reverse-geocode still in flight
 }
 
 form.addEventListener("submit", async (e) => {
@@ -664,6 +703,14 @@ form.addEventListener("submit", async (e) => {
   // the backend's validation below.
   if (!selectedPhoto) {
     errorBanner.textContent = "تکایە وێنەیەک زیاد بکە - وێنە پێویستە بۆ هەموو ڕاپۆرتەکان.";
+    errorBanner.classList.add("show");
+    return;
+  }
+  // If they typed/pasted something in the coordinates box, it has to parse
+  // - an unparsable coordinate is worse than none, so block submission
+  // rather than silently dropping it.
+  if (coordsInput.value.trim() && currentLocation.lat == null) {
+    errorBanner.textContent = "کۆردینەیتەکە دروست نییە - تکایە لینک یان ژمارەکانی Google Maps بلکێنە یان بۆشایی بهێڵەوە.";
     errorBanner.classList.add("show");
     return;
   }
@@ -683,10 +730,10 @@ form.addEventListener("submit", async (e) => {
   if (currentLocation.lat != null) {
     fd.append("lat", currentLocation.lat);
     fd.append("lng", currentLocation.lng);
-    fd.append("accuracy", currentLocation.accuracy);
+    if (currentLocation.accuracy != null) fd.append("accuracy", currentLocation.accuracy);
   }
-  // The label is independent of GPS success - the citizen can type it by
-  // hand even if location access failed or the auto-guess was wrong.
+  // The label is independent of the coordinate - the citizen can type it by
+  // hand even if they didn't paste coordinates or the auto-guess was wrong.
   fd.append("location_label", locationLabel);
   if (selectedPhoto) fd.append("photo", selectedPhoto);
   if (recordedAudioBlob) fd.append("audio", recordedAudioBlob, "voice-note.webm");
@@ -702,7 +749,6 @@ form.addEventListener("submit", async (e) => {
     }
     successBanner.classList.add("show");
     resetForm();
-    requestLocation();
   } catch (err) {
     errorBanner.textContent = "هەڵەیەک ڕوویدا لە ناردنی ڕاپۆرتەکە. تکایە دووبارە هەوڵ بدەوە.";
     errorBanner.classList.add("show");
@@ -711,8 +757,6 @@ form.addEventListener("submit", async (e) => {
     submitBtn.innerHTML = '<span>ناردنی ڕاپۆرت</span><span>←</span>';
   }
 });
-
-requestLocation();
 </script>
 </body>
 </html>
