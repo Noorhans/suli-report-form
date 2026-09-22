@@ -152,6 +152,24 @@
   .dashed-btn .icon { font-size: 22px; }
   .dashed-btn.active { border-style: solid; border-color: var(--accent); }
   .dashed-btn.recording { border-style: solid; border-color: var(--danger); }
+  .photo-choice-row {
+    display: flex;
+    gap: 6px;
+    width: 100%;
+    margin-top: 2px;
+  }
+  .choice-btn {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 7px 4px;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .choice-btn:hover { border-color: var(--accent); }
   .hint {
     display: block;
     font-size: 12px;
@@ -312,10 +330,14 @@
     <textarea id="description" placeholder="بۆ نموونە: ئاو لە شەقام کۆبووەتەوە و ڕێگا داخستووە نزیک بازاڕ."></textarea>
 
     <div class="two-col">
-      <button type="button" class="dashed-btn" id="photo-btn">
+      <div class="dashed-btn" id="photo-cell">
         <span class="icon">📷</span>
-        <span>وێنە زیاد بکە</span>
-      </button>
+        <span>وێنە</span>
+        <div class="photo-choice-row">
+          <button type="button" class="choice-btn" id="camera-btn">📷 وێنەگرتن</button>
+          <button type="button" class="choice-btn" id="gallery-btn">🖼️ گالەری</button>
+        </div>
+      </div>
       <button type="button" class="dashed-btn" id="voice-btn">
         <span class="icon">🎙️</span>
         <span id="voice-btn-label">دەنگ تۆمار بکە</span>
@@ -338,7 +360,8 @@
       </div>
     </div>
 
-    <input type="file" id="photo-input" accept="image/*">
+    <input type="file" id="camera-input" accept="image/*" capture="environment">
+    <input type="file" id="gallery-input" accept="image/*">
 
     <div class="note">
       <b>تێبینی:</b> وێنە و دەنگ و شوێنەکەت بۆ سێرڤەرەکەمان دەنێردرێت و پاشەکەوت دەکرێت بۆ چارەسەرکردنی کێشەکە. زانیاریەکانت تەنها بۆ ئەم مەبەستە بەکاردێت.
@@ -476,10 +499,17 @@ function requestLocation() {
 document.getElementById("location-retry").addEventListener("click", requestLocation);
 
 // ---------- photo ----------
-const photoBtn = document.getElementById("photo-btn");
-const photoInput = document.getElementById("photo-input");
+// Two separate hidden inputs, each opened by its own small button, so both
+// paths are guaranteed to work on every phone: some mobile browsers only
+// offer "take a photo" when capture="environment" is set, and only offer
+// the gallery when it's absent - relying on a single input's native picker
+// to show both isn't consistent across devices, so we give each its own.
+const photoCell = document.getElementById("photo-cell");
+const cameraBtn = document.getElementById("camera-btn");
+const galleryBtn = document.getElementById("gallery-btn");
+const cameraInput = document.getElementById("camera-input");
+const galleryInput = document.getElementById("gallery-input");
 const photoHint = document.getElementById("photo-hint");
-const photoBtnLabel = photoBtn.querySelector("span:last-child");
 const photoPreviewWrap = document.getElementById("photo-preview-wrap");
 const photoPreviewImg = document.getElementById("photo-preview");
 const photoRemoveBtn = document.getElementById("photo-remove-btn");
@@ -487,35 +517,36 @@ let photoPreviewUrl = null;
 
 function clearPhoto() {
   selectedPhoto = null;
-  photoInput.value = ""; // allow re-selecting the same file
+  cameraInput.value = ""; // allow re-selecting/retaking the same file
+  galleryInput.value = "";
   if (photoPreviewUrl) {
     URL.revokeObjectURL(photoPreviewUrl);
     photoPreviewUrl = null;
   }
-  photoBtn.classList.remove("active");
-  photoBtnLabel.textContent = "وێنە زیاد بکە";
+  photoCell.classList.remove("active");
   photoHint.textContent = "هیچ وێنەیەک هەڵنەبژێردراوە";
   photoPreviewWrap.style.display = "none";
 }
 
-// Clicking the button always (re)opens the picker, so taking a new photo
-// after already having one — a retake — just works.
-photoBtn.addEventListener("click", () => photoInput.click());
-photoInput.addEventListener("change", () => {
-  if (photoInput.files && photoInput.files[0]) {
-    selectedPhoto = photoInput.files[0];
-    photoBtn.classList.add("active");
-    photoBtnLabel.textContent = "گۆڕینی وێنە";
-    photoHint.textContent = selectedPhoto.name;
+function handlePhotoFile(file) {
+  if (!file) return;
+  selectedPhoto = file;
+  photoCell.classList.add("active");
+  photoHint.textContent = selectedPhoto.name;
 
-    if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
-    photoPreviewUrl = URL.createObjectURL(selectedPhoto);
-    photoPreviewImg.src = photoPreviewUrl;
-    photoPreviewWrap.style.display = "block";
-  } else {
-    clearPhoto();
-  }
-});
+  if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+  photoPreviewUrl = URL.createObjectURL(selectedPhoto);
+  photoPreviewImg.src = photoPreviewUrl;
+  photoPreviewWrap.style.display = "block";
+}
+
+// Both buttons stay visible even after a photo is picked, so switching
+// method (e.g. retaking with the camera after picking from the gallery)
+// always just works.
+cameraBtn.addEventListener("click", () => cameraInput.click());
+galleryBtn.addEventListener("click", () => galleryInput.click());
+cameraInput.addEventListener("change", () => handlePhotoFile(cameraInput.files && cameraInput.files[0]));
+galleryInput.addEventListener("change", () => handlePhotoFile(galleryInput.files && galleryInput.files[0]));
 photoRemoveBtn.addEventListener("click", (e) => {
   e.stopPropagation();
   clearPhoto();
