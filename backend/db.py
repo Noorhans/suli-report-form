@@ -130,6 +130,29 @@ def list_reports(limit=200, offset=0):
         return [dict(r) for r in rows]
 
 
+def update_report_media(report_id, photo_path=None, audio_path=None):
+    """Overwrites photo_path and/or audio_path on an existing report - used
+    by the admin "re-attach media" endpoint to recover a report whose photo
+    was lost before Supabase Storage was wired in (see storage.py). Only
+    columns actually passed in are touched. Returns True if a row matched."""
+    sets = []
+    params = {"id": report_id}
+    if photo_path is not None:
+        sets.append("photo_path = :photo_path")
+        params["photo_path"] = photo_path
+    if audio_path is not None:
+        sets.append("audio_path = :audio_path")
+        params["audio_path"] = audio_path
+    if not sets:
+        return False
+    with engine.begin() as conn:
+        result = conn.execute(
+            text(f"UPDATE reports SET {', '.join(sets)} WHERE id = :id"),
+            params,
+        )
+        return result.rowcount > 0
+
+
 def count_reports():
     with engine.begin() as conn:
         return conn.execute(text("SELECT COUNT(*) FROM reports")).scalar()
