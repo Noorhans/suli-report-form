@@ -168,6 +168,32 @@ async def get_geocode(lat: float, lng: float):
     return {"label": label, "source": source}
 
 
+@app.patch("/api/reports/{report_id}/media")
+async def update_report_media(
+    report_id: int,
+    photo: Optional[UploadFile] = File(None),
+    audio: Optional[UploadFile] = File(None),
+):
+    """Admin recovery endpoint: re-attaches a photo and/or audio recording to
+    an existing report. Exists for cases like a report whose photo was lost
+    when it was still being saved to Render's non-persistent local disk
+    (before Supabase Storage was wired in) - the original submitter's photo
+    can be re-uploaded here and it'll be saved to Supabase Storage and
+    linked back onto that same report id, with everything else about the
+    report (description, location, timestamp) left untouched."""
+    if not (photo and photo.filename) and not (audio and audio.filename):
+        raise HTTPException(400, "Provide a photo and/or an audio file to attach.")
+
+    photo_path = await _store_upload(photo, "photos", PHOTOS_DIR) if photo and photo.filename else None
+    audio_path = await _store_upload(audio, "audio", AUDIO_DIR) if audio and audio.filename else None
+
+    updated = db.update_report_media(report_id, photo_path=photo_path, audio_path=audio_path)
+    if not updated:
+        raise HTTPException(404, f"No report with id {report_id}")
+
+    return {"id": report_id, "photo_path": photo_path, "audio_path": audio_path}
+
+
 @app.get("/api/reports")
 def get_reports(limit: int = 200, offset: int = 0):
     return {"total": db.count_reports(), "reports": db.list_reports(limit, offset)}
