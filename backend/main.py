@@ -19,8 +19,10 @@ from fastapi.staticfiles import StaticFiles
 
 import db
 import geocode
+import storage
 from config import (
     CATEGORIES, DATA_DIR, PHOTOS_DIR, AUDIO_DIR, MAX_UPLOAD_BYTES, BASE_DIR,
+    USE_SUPABASE_STORAGE,
 )
 
 FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
@@ -54,30 +56,45 @@ def health():
     return {"status": "ok", "reports": db.count_reports()}
 
 
-def _save_upload(upload: UploadFile, target_dir: str) -> str:
-    """Save an UploadFile with a random name, enforcing a size cap. Returns the relative path."""
+async def _read_capped(upload: UploadFile) -> bytes:
+    """Reads an UploadFile fully into memory, enforcing MAX_UPLOAD_BYTES."""
+    chunks = []
+    size = 0
+    while True:
+        chunk = await upload.read(1024 * 1024)
+        if not chunk:
+            break
+        size += len(chunk)
+        if size > MAX_UPLOAD_BYTES:
+            raise HTTPException(413, "File too large")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+async def _store_upload(upload: UploadFile, subdir: str, local_dir: str) -> str:
+    """Saves an uploaded file to Supabase Storage when configured (preferred -
+    it persists across restarts/redeploys), otherwise falls back to local
+    disk for local/dev use without a Supabase project set up. Returns what
+    gets stored in photo_path/audio_path: a full public URL for Supabase
+    Storage, or a path relative to DATA_DIR for local disk."""
+    data = await _read_capped(upload)
+
+    if USE_SUPABASE_STORAGE:
+        try:
+            return await storage.upload_bytes(data, upload.filename, subdir)
+        except Exception as e:
+            raise HTTPException(502, "Could not save the uploaded file. Please try again.") from e
+
     ext = os.path.splitext(upload.filename or "")[1][:10]
     fname = f"{uuid.uuid4().hex}{ext}"
-    dest = os.path.join(target_dir, fname)
-
-    size = 0
+    dest = os.path.join(local_dir, fname)
     with open(dest, "wb") as out:
-        while True:
-            chunk = upload.file.read(1024 * 1024)
-            if not chunk:
-                break
-            size += len(chunk)
-            if size > MAX_UPLOAD_BYTES:
-                out.close()
-                os.remove(dest)
-                raise HTTPException(413, "File too large")
-            out.write(chunk)
-
+        out.write(data)
     return os.path.relpath(dest, DATA_DIR)
 
 
 @app.post("/api/reports")
-def create_report(
+async def create_report(
     category: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
     lat: Optional[float] = Form(None),
@@ -119,8 +136,8 @@ def create_report(
             "Along with the photo, either a written description or a voice recording is required.",
         )
 
-    photo_path = _save_upload(photo, PHOTOS_DIR) if photo and photo.filename else None
-    audio_path = _save_upload(audio, AUDIO_DIR) if audio and audio.filename else None
+    photo_path = await _store_upload(photo, "photos", PHOTOS_DIR) if photo and photo.filename else None
+    audio_path = await _store_upload(audio, "audio", AUDIO_DIR) if audio and audio.filename else None
 
     report_id, created_at = db.insert_report(
         category, description, lat, lng, accuracy, location_label, photo_path, audio_path
