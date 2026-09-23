@@ -28,3 +28,14 @@ PHOTOS_DIR = os.path.join(DATA_DIR, "uploads", "photos")
 AUDIO_DIR = os.path.join(DATA_DIR, "uploads", "audio")
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB per file, generous for a phone photo/voice note
+
+# Supabase Storage (optional). When set, uploaded photos/audio are stored
+# there instead of the local disk - important on hosts like Render's free
+# tier, whose local disk is wiped on every restart/redeploy (see db.py's
+# note about the same problem for SQLite). Falls back to local disk when
+# these aren't configured, so local/dev use with no Supabase project still
+# works out of the box.
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
+SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "").strip()
+SUPABASE_STORAGE_BUCKET = os.environ.get("SUPABASE_STORAGE_BUCKET", "media").strip()
+USE_SUPABASE_STORAGE = bool(SUPABASE_URL and SUPABASE_SERVICE_KEY)
