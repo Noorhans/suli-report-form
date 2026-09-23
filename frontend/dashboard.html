@@ -158,6 +158,15 @@
   a.link { color: #9db8f7; text-decoration: none; }
   a.link:hover { text-decoration: underline; }
   audio.mini { height: 30px; width: 190px; }
+  .thumb {
+    display: block;
+    width: 56px;
+    height: 56px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+  }
   .time-cell { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--text-dim); font-size: 12.5px; }
 </style>
 </head>
@@ -346,12 +355,19 @@ function renderReportsTable(reports, emptyMessage) {
         location += `<div class="muted" style="font-size:11px; margin-top:2px;">${r.lat.toFixed(4)}, ${r.lng.toFixed(4)}</div>`;
       }
     }
-    const mediaPath = (p) => p.replace(/^uploads[\/\\]/, "").replace(/\\/g, "/");
+    // Newer uploads are saved to Supabase Storage and photo_path/audio_path
+    // already holds a full public URL; older records (saved before that
+    // migration) hold a path relative to the app's local disk, served
+    // through /media/... - that disk gets wiped on every restart on hosts
+    // like Render's free tier, so those older links are expected to 404.
+    const mediaUrl = (p) => (/^https?:\/\//i.test(p) ? p : `/media/${p.replace(/^uploads[\/\\]/, "").replace(/\\/g, "/")}`);
     const photo = r.photo_path
-      ? `<a class="link" target="_blank" href="/media/${mediaPath(r.photo_path)}">بینین</a>`
+      ? `<a class="link" target="_blank" href="${mediaUrl(r.photo_path)}" title="کرتە بکە بۆ بینینی گەورە">` +
+        `<img class="thumb" src="${mediaUrl(r.photo_path)}" alt="" loading="lazy" ` +
+        `onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'muted',textContent:'وێنە نەماوە'}))"></a>`
       : `<span class="muted">—</span>`;
     const audio = r.audio_path
-      ? `<audio class="mini" controls src="/media/${mediaPath(r.audio_path)}"></audio>`
+      ? `<audio class="mini" controls src="${mediaUrl(r.audio_path)}"></audio>`
       : `<span class="muted">—</span>`;
     const desc = r.description ? r.description : `<span class="muted">—</span>`;
     const categoryLabel = r.category ? (categoryLabels[r.category] || r.category) : "پۆلێنی نەکراو";
