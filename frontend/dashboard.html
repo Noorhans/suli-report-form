@@ -168,6 +168,35 @@
     background: var(--bg);
   }
   .time-cell { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--text-dim); font-size: 12.5px; }
+  .sev-badge {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .dept-pill { background: rgba(217,164,65,0.16); color: #e3bd7a; }
+  .ai-summary-line {
+    margin-top: 6px;
+    color: var(--text-dim);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .mini-btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    border-radius: 8px;
+    padding: 4px 9px;
+    font-size: 11px;
+    cursor: pointer;
+    font-family: inherit;
+    white-space: nowrap;
+  }
+  .mini-btn:hover { border-color: var(--accent); color: var(--text); }
+  .mini-btn:disabled { opacity: .5; cursor: default; }
 </style>
 </head>
 <body>
@@ -175,6 +204,8 @@
   <div class="top">
     <h1>داشبۆردی ڕاپۆرتەکان</h1>
     <div class="top-actions">
+      <a class="btn" href="/map.html">🗺️ نەخشە</a>
+      <button class="btn" id="triage-all-btn">🤖 شیکاری AI بۆ هەموو ڕاپۆرتە چاوەڕوانەکان</button>
       <button class="btn" id="refresh-btn">نوێکردنەوە</button>
       <a class="btn primary" href="/api/reports/export.csv">داگرتنی CSV</a>
     </div>
@@ -185,6 +216,16 @@
     <div class="stat-tile"><div class="stat-num" id="stat-photo">–</div><div class="stat-label">بە وێنە</div></div>
     <div class="stat-tile"><div class="stat-num" id="stat-audio">–</div><div class="stat-label">بە تۆماری دەنگ</div></div>
     <div class="stat-tile"><div class="stat-num" id="stat-location">–</div><div class="stat-label">بە شوێنی GPS</div></div>
+  </div>
+
+  <div class="panel">
+    <h2>🤖 شیکاری AI</h2>
+    <div class="stats-row" style="grid-template-columns: repeat(2, 1fr); margin-bottom: 18px;">
+      <div class="stat-tile"><div class="stat-num" id="stat-triaged">–</div><div class="stat-label">شیکارکراو بە AI (لە کۆی گشتی)</div></div>
+      <div class="stat-tile"><div class="stat-num" id="stat-avg-severity">–</div><div class="stat-label">ناوەندی ئاستی گرنگی (١-٥)</div></div>
+    </div>
+    <h2 style="font-size:13px; color:var(--text-dim);">دابەشکردن بەپێی بەشی بەرپرس</h2>
+    <div id="dept-chart"><div class="empty">بارکردن...</div></div>
   </div>
 
   <div class="panel">
@@ -209,15 +250,16 @@
           <tr>
             <th>کات</th>
             <th>جۆر</th>
-            <th>وەسف</th>
+            <th>گرنگی (AI)</th>
+            <th>وەسف / پوختەی AI</th>
+            <th>بەشی بەرپرس</th>
             <th>شوێن</th>
             <th>وێنە</th>
             <th>دەنگ</th>
-            <th>دۆخ</th>
           </tr>
         </thead>
         <tbody id="reports-body">
-          <tr><td colspan="7" class="empty">بارکردن...</td></tr>
+          <tr><td colspan="8" class="empty">بارکردن...</td></tr>
         </tbody>
       </table>
     </div>
@@ -253,19 +295,26 @@ async function loadStats() {
   document.getElementById("stat-photo").textContent = s.with_photo;
   document.getElementById("stat-audio").textContent = s.with_audio;
   document.getElementById("stat-location").textContent = s.with_location;
+  document.getElementById("stat-triaged").textContent = s.triaged + " / " + s.total;
+  document.getElementById("stat-avg-severity").textContent = s.avg_severity != null ? s.avg_severity : "–";
 
-  renderBarChart(s.by_category);
+  renderBarChart("bar-chart", s.by_category, "هیچ ڕاپۆرتێک نییە");
+  renderBarChart(
+    "dept-chart",
+    (s.by_department || []).map((d) => ({ label: d.department, count: d.count })),
+    "هێشتا هیچ ڕاپۆرتێک بە AI شیکار نەکراوە"
+  );
   renderSparkline(s.by_day);
 }
 
-function renderBarChart(byCategory) {
-  const el = document.getElementById("bar-chart");
-  if (!byCategory.length) {
-    el.innerHTML = '<div class="empty">هیچ ڕاپۆرتێک نییە</div>';
+function renderBarChart(targetId, items, emptyText) {
+  const el = document.getElementById(targetId);
+  if (!items.length) {
+    el.innerHTML = `<div class="empty">${emptyText}</div>`;
     return;
   }
-  const max = Math.max(...byCategory.map((c) => c.count));
-  el.innerHTML = byCategory.map((c) => {
+  const max = Math.max(...items.map((c) => c.count));
+  el.innerHTML = items.map((c) => {
     const pct = Math.max(4, Math.round((c.count / max) * 100));
     return `
       <div class="bar-row" title="${c.label}: ${c.count}">
@@ -274,6 +323,22 @@ function renderBarChart(byCategory) {
         <div class="bar-count">${c.count}</div>
       </div>`;
   }).join("");
+}
+
+const SEVERITY_COLORS = { 1: "#2fbf71", 2: "#8bc34a", 3: "#d9a441", 4: "#e08a3c", 5: "#e24b4b" };
+
+function severityCell(r) {
+  if (r.ai_status === "done" && r.severity) {
+    const color = SEVERITY_COLORS[r.severity] || "#9a9ca6";
+    return `<span class="sev-badge" style="background:${color}22; color:${color}; border:1px solid ${color}55;">${r.severity}/5</span>`;
+  }
+  const labels = {
+    unavailable: "کلیلی AI دانەمەزراوە",
+    failed: "شیکاری AI سەرکەوتوو نەبوو - کرتە بکە بۆ دووبارە هەوڵدان",
+    pending: "شیکاری AI ڕانەکراوە - کرتە بکە بۆ دەستپێکردن",
+  };
+  const label = labels[r.ai_status] || labels.pending;
+  return `<button class="mini-btn" data-triage-id="${r.id}" title="${label}">🤖 شیکاری بکە</button>`;
 }
 
 function renderSparkline(byDay) {
@@ -341,7 +406,7 @@ function renderReportsTable(reports, emptyMessage) {
   const body = document.getElementById("reports-body");
 
   if (!reports.length) {
-    body.innerHTML = `<tr><td colspan="7" class="empty">${emptyMessage}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="8" class="empty">${emptyMessage}</td></tr>`;
     return;
   }
 
@@ -370,20 +435,62 @@ function renderReportsTable(reports, emptyMessage) {
       ? `<audio class="mini" controls src="${mediaUrl(r.audio_path)}"></audio>`
       : `<span class="muted">—</span>`;
     const desc = r.description ? r.description : `<span class="muted">—</span>`;
+    const aiSummary = r.ai_summary ? `<div class="ai-summary-line">🤖 ${r.ai_summary}</div>` : "";
     const categoryLabel = r.category ? (categoryLabels[r.category] || r.category) : "پۆلێنی نەکراو";
+    const department = r.department
+      ? `<span class="pill dept-pill">${r.department}</span>`
+      : `<span class="muted">—</span>`;
 
     return `
       <tr>
         <td class="time-cell">${fmtTime(r.created_at)}</td>
         <td><span class="pill">${categoryLabel}</span></td>
-        <td class="desc-cell">${desc}</td>
+        <td>${severityCell(r)}</td>
+        <td class="desc-cell">${desc}${aiSummary}</td>
+        <td>${department}</td>
         <td>${location}</td>
         <td>${photo}</td>
         <td>${audio}</td>
-        <td>${r.status}</td>
       </tr>`;
   }).join("");
 }
+
+// Delegated so it keeps working after every re-render (the table body is
+// fully replaced on each load/filter) - lets the admin trigger or retry AI
+// triage on a single report straight from the table, and see it fill in
+// live without leaving the page.
+document.getElementById("reports-body").addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-triage-id]");
+  if (!btn) return;
+  const id = btn.getAttribute("data-triage-id");
+  btn.disabled = true;
+  btn.textContent = "...";
+  try {
+    await fetch(`/api/reports/${id}/triage`, { method: "POST" });
+  } catch (err) {
+    // ignore - loadAll() below will just show it's still not triaged
+  }
+  await loadAll();
+});
+
+document.getElementById("triage-all-btn").addEventListener("click", async () => {
+  const btn = document.getElementById("triage-all-btn");
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "کارپێکردن... (چەند چرکەیەک بۆ هەر ڕاپۆرتێک)";
+  try {
+    const res = await fetch("/api/reports/triage-all", { method: "POST" });
+    const data = await res.json();
+    btn.textContent = `تەواو بوو (${data.processed} ڕاپۆرت)`;
+  } catch (err) {
+    btn.textContent = "هەڵەیەک ڕوویدا";
+  }
+  await loadAll();
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.textContent = original;
+  }, 2500);
+});
 
 async function loadReports() {
   const res = await fetch("/api/reports?limit=200");
