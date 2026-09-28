@@ -4,28 +4,80 @@
 بە وێنە و/یان دەنگ و شوێنی GPS، پاشەکەوتکراو لە بنکەدراوەیەکی SQL.
 
 A Kurdish (Sorani) form for citizens to report city problems (potholes,
-overflowing garbage, flooding, etc.) with an optional photo and/or a voice
-recording, plus automatic GPS location. Every submission is stored as a row
-in a SQL database. This is deliberately just the data collection step — no
-AI analysis is wired in yet.
+overflowing garbage, flooding, etc.) with a photo and/or a voice recording
+plus a location, stored in a SQL database — every report is triaged
+instantly by Claude (Anthropic API): category, a 1-5 severity score, a
+plain-English summary, and which city department should handle it — and
+every report with a location is pinned live on a public map (`map.html`).
 
 Built for the AI Hackathon by Foundation Hub — **October 8–9, 2026**.
+
+## Two ways to submit a report
+
+- **📸 Quick Report (default tab)** — camera-first: the citizen taps one
+  button, takes a photo of the problem right there on the street, and the
+  app does the rest automatically — live GPS (trustworthy here because
+  they're standing at the problem, not filling the form out later at home),
+  a reverse-geocoded street/neighborhood name, and an AI-written
+  category/severity/summary. No typing required.
+- **📝 ڕاپۆرتی تەواو (detailed form)** — the original flow: paste a
+  coordinate copied from Google Maps, type or record a description. Useful
+  when reporting a problem after the fact (e.g. from a photo taken earlier)
+  or when GPS isn't available/accurate.
+
+Both flows land in the same `reports` table and get the same AI triage.
 
 ## How a report works
 
 - The citizen does **not** pick a category — there's no dropdown on the
-  form. Every report is stored as unclassified (`category = NULL`); the
-  `backend/config.py` category list still exists and is used by the
-  dashboard, but it's meant for a later step (an AI classification pass
-  over the description/photo/audio, or manual triage) rather than asking
-  the reporter to self-classify.
-- Location (GPS lat/lng) is captured automatically from the browser on
-  page load; the form still submits if the user denies/lacks location.
-- At least one of: typed description, photo, or voice recording is
-  required (enforced by the API and by a `CHECK` constraint in the DB).
+  form. `backend/ai.py` fills the category in automatically (along with
+  severity/summary/department) the moment the report is submitted, reading
+  the photo + description together with Claude. If no `ANTHROPIC_API_KEY`
+  is set, or the call fails for any reason, the report still saves
+  normally — it's just left unclassified (`ai_status`: `unavailable` or
+  `failed`) and can be triaged later from the dashboard.
+- In the detailed form, a photo, a coordinate pasted from Google Maps, and
+  a street/neighborhood name are all required, plus either a written
+  description or a voice recording (or both). Quick Report only requires
+  the photo — location and description are filled in automatically.
 - Voice notes are recorded in-browser (`MediaRecorder`) and uploaded as a
   real audio file — nothing is simulated. There is no speech-to-text yet;
   that's a follow-up step once this collection pipeline is proven out.
+
+## Map view (`map.html`)
+
+A public, unauthenticated page — linked from the report form and the
+dashboard — showing every report that has a location as a colored pin on
+an OpenStreetMap map (via Leaflet.js, no API key needed): color reflects
+AI-assigned severity (green → red), gray/blue for not-yet-triaged reports.
+Tapping a pin shows the photo, category, severity, department, and
+location. Submitting a Quick Report links straight to that report's pin
+(`map.html?focus=<id>`).
+
+## AI triage (`backend/ai.py`)
+
+Every `POST /api/reports` runs the photo + description + neighborhood name
+through Claude and stores back a category, a 1-5 severity score, a
+one-sentence summary, and a suggested city department — shown to the
+citizen immediately after they submit, and on the dashboard for every
+report. Two admin endpoints exist for reports that predate this feature or
+whose first attempt failed:
+
+- `POST /api/reports/{id}/triage` — (re-)runs AI triage on one report,
+  using its already-stored photo/description. There's a "🤖 شیکاری بکە"
+  button per row on the dashboard for this.
+- `POST /api/reports/triage-all` — runs it over every report that hasn't
+  been successfully triaged yet (sequential, so it stays well under rate
+  limits). There's a button for this at the top of the dashboard too — use
+  it once to backfill AI results onto reports collected before this
+  feature existed.
+
+**Setup**: get a key at console.anthropic.com and set `ANTHROPIC_API_KEY`
+as an env var (locally, or in the Render dashboard for the deployed app —
+`render.yaml` already declares the slot, Render will prompt for it on the
+next deploy). Optionally set `ANTHROPIC_MODEL` to override the default
+model. Nothing else needs to change — the feature degrades gracefully with
+no key set, so it's safe to deploy either way.
 
 ## Project layout
 
@@ -35,7 +87,8 @@ backend/
   db.py       DB schema + queries (SQLite locally, Postgres in production)
   config.py   Category list (single source of truth) + storage paths
 frontend/
-  index.html      The public Kurdish report form
+  index.html      The public Kurdish report form (Quick Report + detailed)
+  map.html        Public map view — every located report pinned by severity
   dashboard.html  Your private view of submitted data (see below)
 data/         Created automatically: reports.db + uploads/photos, uploads/audio
 Procfile, render.yaml   Deployment config for Render (see "Publish it" below)
@@ -113,8 +166,14 @@ already wired up in this project:
    step 1 (a real Postgres via `DATABASE_URL`) matters: without it,
    submitted reports would vanish whenever the service goes idle.
 
+   [Sources: Render free tier docs](https://render.com/docs/free),
+   [Is Render Free? (2026)](https://justinmckelvey.com/blog/is-render-free)
+
 Once `DATABASE_URL` is set, `backend/db.py` automatically uses Postgres
 instead of the local SQLite file — no other code changes needed.
+
+*Want me to actually do this deployment with you (create the GitHub repo,
+walk through Render + Supabase together)? Just say so.*
 
 ## API
 
@@ -122,15 +181,21 @@ instead of the local SQLite file — no other code changes needed.
   the public form (no category field there); the dashboard uses it to
   show readable labels if/when reports get classified.
 - `POST /api/reports` — multipart form: `description`, `lat`, `lng`,
-  `accuracy`, `photo` (file), `audio` (file) — all optional, but at least
-  one of description/photo/audio is required. `category` is also accepted
-  (optional, for a future admin/classification tool) but the public form
-  never sends it. Returns the created report as JSON.
+  `location_label`, `photo` (file, required), `audio` (file) — plus either
+  `description` or `audio`. Runs AI triage synchronously before responding
+  and returns the created report as JSON, including `ai_status`,
+  `severity`, `ai_summary`, `department`.
+- `POST /api/reports/{id}/triage` — (re-)runs AI triage on one existing
+  report.
+- `POST /api/reports/triage-all` — runs AI triage over every
+  not-yet-triaged report.
 - `GET  /api/reports` — list stored reports (most recent first). Powers
   the dashboard table.
 - `GET  /api/reports/stats` — aggregate counts (total, by category, by
-  day, with photo/audio/location). Powers the dashboard charts.
-- `GET  /api/reports/export.csv` — flat CSV export of everything stored.
+  day, with photo/audio/location, AI-triaged count, average severity, by
+  department). Powers the dashboard charts.
+- `GET  /api/reports/export.csv` — flat CSV export of everything stored,
+  including AI fields.
 - `GET  /media/{photos|audio}/{filename}` — serves an uploaded file.
 - `GET  /api/health` — `{"status": "ok", "reports": <count>}`.
 
@@ -143,13 +208,18 @@ One `reports` table — SQLite locally by default, or Postgres when
 |--------------------|---------|--------------------------------------------|
 | id                 | INTEGER | primary key                                |
 | created_at         | TEXT    | ISO 8601 UTC                               |
-| category           | TEXT    | nullable — unset until a future classification step |
+| category           | TEXT    | nullable — filled in by AI triage, or manually |
 | description        | TEXT    | nullable                                   |
-| lat, lng           | REAL    | nullable (GPS may be denied/unavailable)   |
+| lat, lng           | REAL    | nullable                                   |
 | location_accuracy  | REAL    | meters, from the browser Geolocation API   |
-| photo_path         | TEXT    | relative path under `data/`, nullable      |
-| audio_path         | TEXT    | relative path under `data/`, nullable      |
+| location_label     | TEXT    | street/neighborhood name, required         |
+| photo_path         | TEXT    | Supabase Storage URL (or local path for older rows) |
+| audio_path         | TEXT    | Supabase Storage URL (or local path for older rows) |
 | status             | TEXT    | defaults to `new`                          |
+| severity           | INTEGER | 1-5, from AI triage, nullable               |
+| ai_summary         | TEXT    | one-sentence AI summary, nullable          |
+| department         | TEXT    | AI-suggested city department, nullable     |
+| ai_status          | TEXT    | `pending` \| `done` \| `failed` \| `unavailable` |
 
 Inspect the local SQLite file directly any time:
 
@@ -159,9 +229,10 @@ sqlite3 data/reports.db "select id, created_at, category, lat, lng from reports;
 
 ## Known limits / next steps
 
-- No AI triage/transcription yet — this step is only "collect the report
-  and store it reliably." Wiring Kurdish speech-to-text + an LLM
-  extraction step onto the stored audio is the natural next step.
+- No Kurdish speech-to-text yet — AI triage reads the photo + typed
+  description, but a voice-only report (no typed description) doesn't get
+  its audio transcribed or factored into the triage yet. That's the
+  natural next AI step.
 - No auth, no spam/duplicate detection. The dashboard has no password —
   see "Your dashboard" above.
 - CORS is wide open (`*`) since the form is meant to be shared broadly for
