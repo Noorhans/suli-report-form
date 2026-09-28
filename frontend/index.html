@@ -302,6 +302,106 @@
   .banner.success { background: rgba(47,191,113,0.12); border: 1px solid var(--success); color: #7fe3ab; }
   .banner.error { background: rgba(226,75,75,0.12); border: 1px solid var(--danger); color: #f29c9c; }
 
+  .ai-card {
+    display: none;
+    margin-top: 14px;
+    background: rgba(59,109,238,0.08);
+    border: 1px solid rgba(59,109,238,0.35);
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-size: 13.5px;
+    line-height: 1.6;
+  }
+  .ai-card-title { font-weight: 700; margin-bottom: 10px; color: var(--text); }
+  .ai-card-row { display: flex; justify-content: space-between; gap: 10px; color: var(--text-dim); margin: 4px 0; }
+  .ai-card-row b { color: var(--text); font-weight: 600; }
+  .ai-card-summary { margin-top: 10px; color: var(--text); padding-top: 10px; border-top: 1px solid rgba(59,109,238,0.25); }
+
+  .mode-tabs {
+    display: flex;
+    gap: 6px;
+    margin: 22px 0 4px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 4px;
+  }
+  .mode-tab {
+    flex: 1;
+    text-align: center;
+    padding: 11px 8px;
+    border-radius: 9px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text-dim);
+    cursor: pointer;
+    border: none;
+    background: none;
+    font-family: inherit;
+  }
+  .mode-tab.active { background: var(--accent); color: #fff; }
+  .hidden { display: none !important; }
+
+  .quick-camera-btn {
+    width: 100%;
+    margin-top: 18px;
+    background: var(--card);
+    border: 2px dashed var(--accent);
+    border-radius: 18px;
+    padding: 44px 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    color: var(--text);
+    font-family: inherit;
+  }
+  .quick-camera-btn .icon { font-size: 44px; }
+  .quick-camera-btn .qlabel { font-size: 16px; font-weight: 700; }
+  .quick-camera-btn .qsub { font-size: 12.5px; color: var(--text-dim); text-align: center; line-height: 1.6; }
+
+  .quick-status-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 14px;
+    font-size: 12.5px;
+    color: var(--text-dim);
+  }
+  .quick-preview { display: none; margin-top: 16px; }
+  .quick-preview img {
+    width: 100%;
+    max-height: 260px;
+    object-fit: cover;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    display: block;
+  }
+  .quick-progress {
+    display: none;
+    margin-top: 14px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 13.5px;
+  }
+  .quick-actions { display: none; gap: 10px; margin-top: 16px; }
+  .quick-actions a, .quick-actions button {
+    flex: 1;
+    border-radius: 12px;
+    padding: 14px;
+    font-size: 13.5px;
+    font-weight: 700;
+    font-family: inherit;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+    border: none;
+  }
+  .quick-actions a { background: var(--accent); color: #fff; }
+  .quick-actions button { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+
   input[type="file"] { display: none; }
   audio { width: 100%; margin-top: 8px; }
 </style>
@@ -310,10 +410,42 @@
 <div class="card">
   <div class="top-row">
     <h1>ڕاپۆرتکردنی کێشە</h1>
-    <span class="badge">پۆرتەلی هاوڵاتی</span>
+    <a class="badge" href="map.html" style="text-decoration:none;">🗺️ نەخشە</a>
   </div>
   <p class="subtitle">یارمەتیمان بدە بۆ ناسینەوەی کێشەکانی شارەکەت</p>
 
+  <div class="mode-tabs">
+    <button type="button" class="mode-tab active" id="tab-quick">📸 ڕاپۆرتی خێرا</button>
+    <button type="button" class="mode-tab" id="tab-detailed">📝 ڕاپۆرتی تەواو</button>
+  </div>
+
+  <div id="quick-wrap">
+    <button type="button" class="quick-camera-btn" id="quick-camera-btn">
+      <span class="icon">📷</span>
+      <span class="qlabel">وێنەی کێشەکە بگرە</span>
+      <span class="qsub">لەسەر شوێنی کێشەکە بوەستە و وێنە بگرە - شوێن و جۆری کێشە خۆکارانە دەستنیشان دەکرێت</span>
+    </button>
+    <input type="file" id="quick-camera-input" accept="image/*" capture="environment">
+
+    <div class="quick-status-row" id="quick-gps-status">
+      <span class="dot pending" id="quick-gps-dot"></span>
+      <span id="quick-gps-text">شوێن (GPS) ئامادەکردن...</span>
+    </div>
+
+    <div class="quick-preview" id="quick-preview-wrap">
+      <img id="quick-preview-img" alt="">
+    </div>
+
+    <div class="quick-progress" id="quick-progress">AI شیکاری ڕاپۆرتەکە دەکات...</div>
+    <div class="ai-card" id="quick-ai-card"></div>
+    <div class="quick-actions" id="quick-actions">
+      <a href="map.html">🗺️ بینین لەسەر نەخشە</a>
+      <button type="button" id="quick-again-btn">ڕاپۆرتێکی تر بنێرە</button>
+    </div>
+    <div class="banner error" id="quick-error-banner"></div>
+  </div>
+
+  <div id="detailed-wrap" class="hidden">
   <form id="report-form">
     <label for="coords-input">کۆردینەیت (لە Google Maps) <span style="color:var(--danger);">*</span></label>
     <input type="text" class="location-label-input" id="coords-input" placeholder="کۆردینەیت یان لینکی Google Maps بلکێنە (بۆ نموونە: 36.1911, 44.0092)">
@@ -377,7 +509,9 @@
 
     <div class="banner success" id="success-banner">ڕاپۆرتەکەت بە سەرکەوتوویی نێردرا. سوپاس بۆ یارمەتیدانت!</div>
     <div class="banner error" id="error-banner"></div>
+    <div class="ai-card" id="ai-card"></div>
   </form>
+  </div>
 </div>
 
 <script>
@@ -390,6 +524,199 @@ let mediaRecorder = null;
 let mediaChunks = [];
 let recordStartTime = null;
 let recordTimerInterval = null;
+
+// ---------- AI triage display ----------
+// Every report gets triaged by Claude the moment it's submitted (see
+// backend/ai.py); this shows that result right back to the citizen as an
+// immediate "look, AI just analyzed your report" moment.
+let categoryLabels = {};
+(async function loadCategoryLabels() {
+  try {
+    const res = await fetch(API_BASE + "/api/config");
+    const data = await res.json();
+    categoryLabels = data.categories || {};
+  } catch (e) {
+    categoryLabels = {};
+  }
+})();
+
+function severityDots(n) {
+  if (!n) return "";
+  let out = "";
+  for (let i = 1; i <= 5; i++) out += i <= n ? "●" : "○";
+  return out;
+}
+
+const aiCard = document.getElementById("ai-card");
+// Shared by both the detailed form and Quick Report mode. Always confirms
+// the save (with the report's id and resolved location) even when AI
+// triage isn't available yet (no ANTHROPIC_API_KEY configured, or a
+// transient failure) - a citizen should never be left wondering whether
+// their report actually went through just because the AI layer is down.
+function renderAiCard(data, target) {
+  const el = target || aiCard;
+  const catLabel = data.category ? (categoryLabels[data.category] || data.category) : null;
+  let body = `<div class="ai-card-title">✅ ڕاپۆرتەکە پاشەکەوتکرا (ژمارە #${data.id})</div>`;
+  if (data.location_label) {
+    body += `<div class="ai-card-row"><span>شوێن</span><b>${data.location_label}</b></div>`;
+  }
+  if (data.ai_status === "done") {
+    body += `
+      <div class="ai-card-row"><span>جۆری کێشە (AI)</span><b>${catLabel || "—"}</b></div>
+      <div class="ai-card-row"><span>ئاستی گرنگی</span><b>${severityDots(data.severity)} (${data.severity}/5)</b></div>
+      ${data.department ? `<div class="ai-card-row"><span>بەشی بەرپرس</span><b>${data.department}</b></div>` : ""}
+      ${data.ai_summary ? `<div class="ai-card-summary">${data.ai_summary}</div>` : ""}
+    `;
+  } else {
+    body += `<div class="ai-card-row" style="justify-content:flex-start;"><span>🤖 شیکاری AI هێشتا ئامادە نییە بۆ ئەم ڕاپۆرتە</span></div>`;
+  }
+  el.innerHTML = body;
+  el.style.display = "block";
+}
+
+// ---------- mode tabs ----------
+const tabQuick = document.getElementById("tab-quick");
+const tabDetailed = document.getElementById("tab-detailed");
+const quickWrap = document.getElementById("quick-wrap");
+const detailedWrap = document.getElementById("detailed-wrap");
+
+tabQuick.addEventListener("click", () => {
+  tabQuick.classList.add("active");
+  tabDetailed.classList.remove("active");
+  quickWrap.classList.remove("hidden");
+  detailedWrap.classList.add("hidden");
+});
+tabDetailed.addEventListener("click", () => {
+  tabDetailed.classList.add("active");
+  tabQuick.classList.remove("active");
+  detailedWrap.classList.remove("hidden");
+  quickWrap.classList.add("hidden");
+});
+
+// ---------- Quick Report mode ----------
+// The citizen is physically standing at the problem when they tap the
+// shutter, so (unlike the detailed form) automatic GPS is trustworthy here
+// - that's exactly the case the detailed form's manual coordinate-paste
+// was designed to avoid (GPS reading someone's house instead of the
+// problem, because they filled the form out later, away from the site).
+const quickCameraBtn = document.getElementById("quick-camera-btn");
+const quickCameraInput = document.getElementById("quick-camera-input");
+const quickGpsDot = document.getElementById("quick-gps-dot");
+const quickGpsText = document.getElementById("quick-gps-text");
+const quickPreviewWrap = document.getElementById("quick-preview-wrap");
+const quickPreviewImg = document.getElementById("quick-preview-img");
+const quickProgress = document.getElementById("quick-progress");
+const quickAiCard = document.getElementById("quick-ai-card");
+const quickActions = document.getElementById("quick-actions");
+const quickErrorBanner = document.getElementById("quick-error-banner");
+const quickAgainBtn = document.getElementById("quick-again-btn");
+const quickMapLink = quickActions.querySelector("a");
+
+let quickGeo = null;
+let quickGeoPromise = null;
+
+// Requested proactively (page load, and again after each submit) so the
+// permission prompt / GPS fix is already resolved by the time the citizen
+// actually taps the shutter, instead of adding that wait after the photo.
+function requestQuickLocation() {
+  quickGpsDot.className = "dot pending";
+  quickGpsText.textContent = "شوێن (GPS) ئامادەکردن...";
+  quickGeoPromise = new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      quickGeo = null;
+      quickGpsDot.className = "dot err";
+      quickGpsText.textContent = "ئەم وێبگەڕە پشتگیری شوێن ناکات - بڕۆ بۆ ڕاپۆرتی تەواو";
+      resolve(null);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        quickGeo = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        quickGpsDot.className = "dot ok";
+        quickGpsText.textContent = "شوێن ئامادەیە ✓";
+        resolve(quickGeo);
+      },
+      () => {
+        quickGeo = null;
+        quickGpsDot.className = "dot err";
+        quickGpsText.textContent = "شوێن نەدۆزرایەوە - ڕێگەپێدان بدە یان بڕۆ بۆ ڕاپۆرتی تەواو";
+        resolve(null);
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 15000 }
+    );
+  });
+  return quickGeoPromise;
+}
+requestQuickLocation();
+
+quickCameraBtn.addEventListener("click", () => quickCameraInput.click());
+
+quickCameraInput.addEventListener("change", async () => {
+  const file = quickCameraInput.files && quickCameraInput.files[0];
+  if (!file) return;
+
+  quickErrorBanner.classList.remove("show");
+  quickActions.style.display = "none";
+  quickAiCard.style.display = "none";
+
+  const previewUrl = URL.createObjectURL(file);
+  quickPreviewImg.src = previewUrl;
+  quickPreviewWrap.style.display = "block";
+
+  quickProgress.style.display = "block";
+  quickProgress.textContent = "شوێن پشتڕاستدەکرێتەوە...";
+
+  let geo = quickGeo || (quickGeoPromise ? await quickGeoPromise : null);
+  if (!geo) geo = await requestQuickLocation();
+
+  if (!geo) {
+    quickProgress.style.display = "none";
+    quickErrorBanner.textContent = "نەتوانرا شوێنەکەت بدۆزرێتەوە. تکایە ڕێگەپێدانی شوێن (Location) بدە، یان بڕۆ بۆ '📝 ڕاپۆرتی تەواو' و کۆردینەیت بلکێنە.";
+    quickErrorBanner.classList.add("show");
+    quickCameraInput.value = "";
+    return;
+  }
+
+  quickProgress.textContent = "ناوی شوێن دەدۆزرێتەوە...";
+  const label = await reverseGeocode(geo.lat, geo.lng);
+
+  quickProgress.textContent = "ناردن و شیکاری AI... (چەند چرکەیەک ڕادەگرێت)";
+
+  const fd = new FormData();
+  fd.append("photo", file);
+  fd.append("lat", geo.lat);
+  fd.append("lng", geo.lng);
+  fd.append("location_label", label || (geo.lat.toFixed(5) + ", " + geo.lng.toFixed(5)));
+  fd.append("quick_report", "true");
+
+  try {
+    const res = await fetch(API_BASE + "/api/reports", { method: "POST", body: fd });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "هەڵەیەک ڕوویدا");
+    }
+    const data = await res.json();
+    quickProgress.style.display = "none";
+    renderAiCard(data, quickAiCard);
+    quickActions.style.display = "flex";
+    if (quickMapLink) quickMapLink.href = "map.html?focus=" + data.id;
+  } catch (err) {
+    quickProgress.style.display = "none";
+    quickErrorBanner.textContent = "هەڵەیەک ڕوویدا لە ناردنی ڕاپۆرتەکە. تکایە دووبارە هەوڵ بدەوە.";
+    quickErrorBanner.classList.add("show");
+  } finally {
+    quickCameraInput.value = "";
+  }
+});
+
+quickAgainBtn.addEventListener("click", () => {
+  quickPreviewWrap.style.display = "none";
+  quickAiCard.style.display = "none";
+  quickActions.style.display = "none";
+  quickErrorBanner.classList.remove("show");
+  requestQuickLocation();
+  quickCameraInput.click();
+});
 
 // ---------- location ----------
 // Many roads in this region are only tagged with plot/block codes in
@@ -694,6 +1021,7 @@ form.addEventListener("submit", async (e) => {
   e.preventDefault();
   successBanner.classList.remove("show");
   errorBanner.classList.remove("show");
+  aiCard.style.display = "none";
 
   const description = document.getElementById("description").value.trim();
   const locationLabel = locationLabelInput.value.trim();
@@ -760,7 +1088,7 @@ form.addEventListener("submit", async (e) => {
   if (recordedAudioBlob) fd.append("audio", recordedAudioBlob, "voice-note.webm");
 
   submitBtn.disabled = true;
-  submitBtn.textContent = "ناردن...";
+  submitBtn.textContent = "ناردن... (AI شیکاری دەکات، چەند چرکەیەک ڕادەگرێت)";
 
   try {
     const res = await fetch(API_BASE + "/api/reports", { method: "POST", body: fd });
@@ -768,7 +1096,9 @@ form.addEventListener("submit", async (e) => {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || "هەڵەیەک ڕوویدا");
     }
+    const data = await res.json();
     successBanner.classList.add("show");
+    renderAiCard(data);
     resetForm();
   } catch (err) {
     errorBanner.textContent = "هەڵەیەک ڕوویدا لە ناردنی ڕاپۆرتەکە. تکایە دووبارە هەوڵ بدەوە.";
