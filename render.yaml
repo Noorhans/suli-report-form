@@ -25,3 +25,8 @@ services:
         sync: false
       - key: SUPABASE_STORAGE_BUCKET
         value: media
+      # AI triage (backend/ai.py) - without this, every report still saves
+      # normally, it just gets ai_status="unavailable" and no category/
+      # severity/summary/department. Get a key at console.anthropic.com.
+      - key: ANTHROPIC_API_KEY
+        sync: false
