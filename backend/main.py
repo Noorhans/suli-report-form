@@ -17,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
+import ai
 import db
 import geocode
 import storage
@@ -103,6 +104,7 @@ async def create_report(
     location_label: Optional[str] = Form(None),
     photo: Optional[UploadFile] = File(None),
     audio: Optional[UploadFile] = File(None),
+    quick_report: bool = Form(False),
 ):
     # Category is no longer chosen by the citizen in the form — it's left
     # unset here and is meant to be filled in later (e.g. by an AI
@@ -116,21 +118,25 @@ async def create_report(
     description = (description or "").strip() or None
     location_label = (location_label or "").strip() or None
 
-    # A photo, a coordinate (manually copied by the citizen from Google
-    # Maps - never read automatically from the device's GPS), and a
-    # street/neighborhood name are all always required, plus either a
-    # written description or a voice recording (or both). Enforced here
-    # too, not just in the frontend, since the frontend check can be
-    # bypassed.
+    # A photo, a coordinate, and a street/neighborhood name are always
+    # required. Beyond that, there are two ways to satisfy "what's the
+    # problem": either a written description or a voice recording (the
+    # original detailed form), or quick_report=true (the camera-first Quick
+    # Report flow in frontend/index.html) - there the citizen is standing at
+    # the problem when they tap the shutter, so the coordinate is captured
+    # live (accurate) rather than pasted from Google Maps, and AI triage's
+    # own summary stands in for a typed description instead of asking for
+    # one. Enforced here too, not just in the frontend, since the frontend
+    # check can be bypassed.
     has_photo = bool(photo and photo.filename)
     has_audio = bool(audio and audio.filename)
     if not has_photo:
         raise HTTPException(400, "A photo is required for every report.")
     if lat is None or lng is None:
-        raise HTTPException(400, "A coordinate copied from Google Maps is required for every report.")
+        raise HTTPException(400, "A coordinate is required for every report.")
     if not location_label:
         raise HTTPException(400, "A street or neighborhood name is required for every report.")
-    if not description and not has_audio:
+    if not quick_report and not description and not has_audio:
         raise HTTPException(
             400,
             "Along with the photo, either a written description or a voice recording is required.",
@@ -143,18 +149,51 @@ async def create_report(
         category, description, lat, lng, accuracy, location_label, photo_path, audio_path
     )
 
+    # AI triage: reads the photo + description/location straight back through
+    # Claude and returns a category/severity/summary/department, run here so
+    # the citizen sees the result instantly in the same response - this is
+    # deliberately synchronous (adds a few seconds to the request) rather
+    # than a background job, since immediate feedback is the point of the
+    # feature for a live demo. It can never fail the submission itself: both
+    # the AI call and the DB update below are wrapped so the report a citizen
+    # just submitted is always saved and acknowledged, AI or no AI.
+    try:
+        ai_result = await ai.analyze_report(description, location_label, photo_path)
+    except Exception:
+        ai_result = {"status": "failed", "category": None, "severity": None, "summary": None, "department": None}
+
+    try:
+        if ai_result["status"] == "done":
+            db.update_report_ai(
+                report_id, "done",
+                category=ai_result["category"] if category is None else None,
+                severity=ai_result["severity"],
+                summary=ai_result["summary"],
+                department=ai_result["department"],
+            )
+        else:
+            db.update_report_ai(report_id, ai_result["status"])
+    except Exception:
+        pass  # report itself is already saved; the AI status update is best-effort
+
+    final_category = category or (ai_result["category"] if ai_result["status"] == "done" else None)
+
     return JSONResponse(
         {
             "id": report_id,
             "created_at": created_at,
-            "category": category,
-            "category_label": CATEGORIES.get(category, "پۆلێنی نەکراو"),
+            "category": final_category,
+            "category_label": CATEGORIES.get(final_category, "پۆلێنی نەکراو"),
             "description": description,
             "lat": lat,
             "lng": lng,
             "location_label": location_label,
             "photo_path": photo_path,
             "audio_path": audio_path,
+            "ai_status": ai_result["status"],
+            "severity": ai_result["severity"] if ai_result["status"] == "done" else None,
+            "ai_summary": ai_result["summary"] if ai_result["status"] == "done" else None,
+            "department": ai_result["department"] if ai_result["status"] == "done" else None,
         },
         status_code=201,
     )
@@ -192,6 +231,62 @@ async def update_report_media(
         raise HTTPException(404, f"No report with id {report_id}")
 
     return {"id": report_id, "photo_path": photo_path, "audio_path": audio_path}
+
+
+@app.post("/api/reports/{report_id}/triage")
+async def triage_report(report_id: int):
+    """(Re-)runs AI triage on an existing report using its already-stored
+    photo/description/location. Lets the dashboard backfill AI results onto
+    reports submitted before this feature existed (e.g. the reports from
+    initial data collection), or retry one that came back 'failed' the
+    first time (a transient API hiccup, a slow image download, etc.)."""
+    report = db.get_report(report_id)
+    if not report:
+        raise HTTPException(404, f"No report with id {report_id}")
+
+    ai_result = await ai.analyze_report(report["description"], report["location_label"], report["photo_path"])
+    if ai_result["status"] == "done":
+        db.update_report_ai(
+            report_id, "done",
+            category=ai_result["category"] if report["category"] is None else None,
+            severity=ai_result["severity"],
+            summary=ai_result["summary"],
+            department=ai_result["department"],
+        )
+    else:
+        db.update_report_ai(report_id, ai_result["status"])
+
+    return {"id": report_id, **ai_result}
+
+
+@app.post("/api/reports/triage-all")
+async def triage_all_reports(only_pending: bool = True):
+    """Bulk-runs AI triage over stored reports - the one-click way to
+    backfill AI results onto every report collected before this feature
+    existed. Runs sequentially (not in parallel) to stay comfortably under
+    Anthropic's rate limits; fine at hackathon volume (tens of reports).
+    only_pending=true (the default) skips reports whose last triage already
+    succeeded, so re-running this after adding a few new reports doesn't
+    re-spend API calls on ones already done."""
+    ids = db.list_report_ids(exclude_status="done") if only_pending else db.list_report_ids()
+    results = []
+    for report_id in ids:
+        report = db.get_report(report_id)
+        if not report:
+            continue
+        ai_result = await ai.analyze_report(report["description"], report["location_label"], report["photo_path"])
+        if ai_result["status"] == "done":
+            db.update_report_ai(
+                report_id, "done",
+                category=ai_result["category"] if report["category"] is None else None,
+                severity=ai_result["severity"],
+                summary=ai_result["summary"],
+                department=ai_result["department"],
+            )
+        else:
+            db.update_report_ai(report_id, ai_result["status"])
+        results.append({"id": report_id, "status": ai_result["status"]})
+    return {"processed": len(results), "results": results}
 
 
 @app.get("/api/reports")
